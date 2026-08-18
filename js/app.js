@@ -626,7 +626,30 @@ function renderScanTab(s) {
 
 function renderManualTab(s) {
   const m = s.manual;
+  const search = s.manualSearch;
+
+  const searchResults = search.results.length ? `
+    <div class="fav-list" style="margin-bottom:14px;">
+      ${search.results.map((r, i) => `
+        <div class="fav-row" data-action="pick-search-result" data-index="${i}">
+          <div class="fav-main">
+            <div class="fav-name">${escapeHtml(r.name)}</div>
+            <div class="fav-meta">${r.brand ? escapeHtml(r.brand) + " · " : ""}${fmtNum(r.perUnit.calories)} kcal per ${escapeHtml(r.baseLabel)}</div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  ` : "";
+
   return `
+    <form id="manualSearchForm" style="display:flex; gap:8px; margin-bottom:4px;">
+      <input type="search" name="query" id="manualSearchInput" placeholder="Search USDA by name (e.g. grapes)" value="${escapeHtml(search.query)}" style="flex:1;">
+      <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+    </form>
+    ${search.loading ? `<div class="scan-hint" style="text-align:left; margin:8px 0;">Searching…</div>` : ""}
+    ${search.error ? `<div class="error-text">${escapeHtml(search.error)}</div>` : ""}
+    ${!search.loading && search.searched && search.results.length === 0 ? `<div class="scan-hint" style="text-align:left; margin:8px 0;">No matches — try a different search, or fill in the form below by hand.</div>` : ""}
+    ${searchResults}
     <form id="manualEntryForm">
       <div class="field-wrap">
         <span class="field-label">Food name</span>
@@ -1022,6 +1045,10 @@ function newManualDraft() {
   return { name: "", quantity: 1, unit: "serving", calories: 0, protein: 0, carbs: 0, fat: 0 };
 }
 
+function newManualSearchState() {
+  return { query: "", results: [], loading: false, error: null, searched: false };
+}
+
 async function closeSheet() {
   await BarcodeScanner.stop();
   state.sheet = null;
@@ -1051,7 +1078,7 @@ async function handleAction(action, ds, el) {
 
     // ---- add sheet ----
     case "open-add-sheet":
-      state.sheet = { type: "add", meal: ds.meal, tab: "scan", product: null, lookupLoading: false, scanError: null, qty: 1, saveFav: false, manual: newManualDraft(), favSearch: "" };
+      state.sheet = { type: "add", meal: ds.meal, tab: "scan", product: null, lookupLoading: false, scanError: null, qty: 1, saveFav: false, manual: newManualDraft(), favSearch: "", manualSearch: newManualSearchState() };
       renderSheetRoot();
       break;
     case "add-sheet-tab":
@@ -1069,6 +1096,18 @@ async function handleAction(action, ds, el) {
       state.sheet.tab = "manual";
       state.sheet.manual = newManualDraft();
       state.sheet.scannedBarcode = barcode || null;
+      renderSheetRoot();
+      break;
+    }
+    case "pick-search-result": {
+      const r = state.sheet.manualSearch.results[parseInt(ds.index, 10)];
+      if (r) {
+        state.sheet.manual = {
+          name: r.name, quantity: 1, unit: r.baseLabel,
+          calories: r.perUnit.calories, protein: r.perUnit.protein, carbs: r.perUnit.carbs, fat: r.perUnit.fat,
+        };
+        state.sheet.manualSearch.results = [];
+      }
       renderSheetRoot();
       break;
     }
@@ -1323,6 +1362,27 @@ function attachGlobalListeners() {
   });
 
   document.addEventListener("submit", async (e) => {
+    if (e.target.id === "manualSearchForm") {
+      e.preventDefault();
+      const query = new FormData(e.target).get("query").trim();
+      const search = state.sheet.manualSearch;
+      search.query = query;
+      if (!query) return;
+      search.loading = true;
+      search.error = null;
+      renderSheetRoot();
+      try {
+        search.results = await searchFoodUSDA(query);
+        search.searched = true;
+      } catch (err) {
+        search.error = err.message || "Search failed.";
+        search.results = [];
+      }
+      search.loading = false;
+      renderSheetRoot();
+      return;
+    }
+
     if (e.target.id === "goalsForm") {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -1437,6 +1497,12 @@ function attachGlobalListeners() {
     }
     if (e.target.id === "favNameInput") {
       state.sheet.name = e.target.value;
+    }
+    if (e.target.id === "manualSearchInput") {
+      // Just keep state in sync in case something else re-renders the sheet
+      // mid-typing — no re-render here, this field doesn't filter anything
+      // locally, searching only happens on submit.
+      state.sheet.manualSearch.query = e.target.value;
     }
     if (e.target.name === "quantity" && e.target.closest("#editEntryForm")) {
       const perUnit = state.sheet.entry.perUnit;
