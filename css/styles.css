@@ -172,8 +172,12 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
 }
 
 /* ---------- daily totals ---------- */
-.totals-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
+.totals-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; }
 .totals-row.two-col { grid-template-columns: repeat(2, 1fr); }
+.totals-row-secondary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 16px; }
+.total-card-mini { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 7px 6px; display: flex; flex-direction: column; gap: 1px; }
+.total-card-mini .total-label { font-size: 9px; }
+.total-card-mini .total-value { font-size: 13px; }
 .total-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 8px; display: flex; flex-direction: column; gap: 3px; }
 .total-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
 .total-value { color: var(--text); font-size: 16.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -318,6 +322,7 @@ input::placeholder { color: var(--muted-2); }
 .macro-chip.p { background: var(--protein-bg); color: var(--protein); }
 .macro-chip.c { background: var(--carbs-bg); color: var(--carbs); }
 .macro-chip.f { background: var(--fat-bg); color: var(--fat); }
+.macro-chip.extra { background: var(--card-2); color: var(--muted); }
 
 /* meal slot picker */
 .meal-slot-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 4px; }
@@ -373,16 +378,13 @@ svg text { font-family: -apple-system, sans-serif; }
 .water-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
 .water-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
 .water-title { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
+.water-header-right { display: flex; align-items: center; gap: 8px; }
 .water-total { font-size: 13px; color: var(--water); font-weight: 600; font-variant-numeric: tabular-nums; }
-.water-quick-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; margin-bottom: 8px; }
+.water-undo-btn { background: none; border: none; color: var(--muted-2); cursor: pointer; padding: 2px; display: flex; }
+.water-undo-btn:active { opacity: 0.6; }
+.water-quick-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
 .water-qty-btn { background: var(--water-bg); border: 1px solid var(--water-border); color: var(--water); border-radius: 9px; padding: 9px 0; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .water-qty-btn:active { opacity: 0.75; }
-.water-custom-row { display: flex; gap: 8px; }
-.water-custom-row input { flex: 1; }
-.water-list { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
-.water-row { display: flex; align-items: center; justify-content: space-between; background: var(--water-bg); border: 1px solid var(--water-border); border-radius: 8px; padding: 7px 10px; }
-.water-row-amount { font-size: 12.5px; color: var(--text); font-weight: 500; }
-.water-row-del { background: none; border: none; color: var(--muted-2); cursor: pointer; padding: 3px; display: flex; }
 
 /* ---------- goals / progress ---------- */
 .progress-track { background: var(--card-2); border-radius: 999px; height: 5px; overflow: hidden; margin-top: 6px; }

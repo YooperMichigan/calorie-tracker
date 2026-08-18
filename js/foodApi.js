@@ -43,7 +43,7 @@ async function lookupBarcode(barcode) {
   const servingLabel = p.serving_size ? String(p.serving_size).trim() : null;
   const servingGrams = parseServingGrams(servingLabel);
 
-  let baseLabel, calories, protein, carbs, fat;
+  let baseLabel, calories, protein, carbs, fat, fiber, sugar, satFat, sodium;
 
   const hasServingData = servingLabel && (kcalFrom(n, "_serving") !== null || (servingGrams && kcalFrom(n, "_100g") !== null));
 
@@ -53,15 +53,25 @@ async function lookupBarcode(barcode) {
     protein = num(n["proteins_serving"]);
     carbs = num(n["carbohydrates_serving"]);
     fat = num(n["fat_serving"]);
+    fiber = num(n["fiber_serving"]);
+    sugar = num(n["sugars_serving"]);
+    satFat = num(n["saturated-fat_serving"]);
+    // OFF reports sodium in grams; the rest of the app works in mg.
+    sodium = num(n["sodium_serving"]) !== null ? num(n["sodium_serving"]) * 1000 : null;
 
     // Some products list serving_size but only publish *_100g values — derive
     // the serving numbers ourselves using the parsed gram weight.
     if (calories === null && servingGrams) {
       const factor = servingGrams / 100;
-      calories = kcalFrom(n, "_100g") !== null ? round1(kcalFrom(n, "_100g") * factor) : null;
-      protein = num(n["proteins_100g"]) !== null ? round1(num(n["proteins_100g"]) * factor) : null;
-      carbs = num(n["carbohydrates_100g"]) !== null ? round1(num(n["carbohydrates_100g"]) * factor) : null;
-      fat = num(n["fat_100g"]) !== null ? round1(num(n["fat_100g"]) * factor) : null;
+      const scale = (v) => (v !== null ? round1(v * factor) : null);
+      calories = scale(kcalFrom(n, "_100g"));
+      protein = scale(num(n["proteins_100g"]));
+      carbs = scale(num(n["carbohydrates_100g"]));
+      fat = scale(num(n["fat_100g"]));
+      fiber = scale(num(n["fiber_100g"]));
+      sugar = scale(num(n["sugars_100g"]));
+      satFat = scale(num(n["saturated-fat_100g"]));
+      sodium = num(n["sodium_100g"]) !== null ? scale(num(n["sodium_100g"]) * 1000) : null;
     }
   } else {
     baseLabel = "100 g";
@@ -69,12 +79,20 @@ async function lookupBarcode(barcode) {
     protein = num(n["proteins_100g"]);
     carbs = num(n["carbohydrates_100g"]);
     fat = num(n["fat_100g"]);
+    fiber = num(n["fiber_100g"]);
+    sugar = num(n["sugars_100g"]);
+    satFat = num(n["saturated-fat_100g"]);
+    sodium = num(n["sodium_100g"]) !== null ? num(n["sodium_100g"]) * 1000 : null;
   }
 
-  if (calories === null) calories = 0;
-  if (protein === null) protein = 0;
-  if (carbs === null) carbs = 0;
-  if (fat === null) fat = 0;
+  calories = calories ?? 0;
+  protein = protein ?? 0;
+  carbs = carbs ?? 0;
+  fat = fat ?? 0;
+  fiber = fiber ?? 0;
+  sugar = sugar ?? 0;
+  satFat = satFat ?? 0;
+  sodium = sodium ?? 0;
 
   const name = p.product_name && p.product_name.trim() ? p.product_name.trim() : "Unnamed product";
 
@@ -84,7 +102,10 @@ async function lookupBarcode(barcode) {
     name,
     brand: p.brands ? p.brands.split(",")[0].trim() : "",
     baseLabel,
-    perUnit: { calories: round1(calories), protein: round1(protein), carbs: round1(carbs), fat: round1(fat) },
+    perUnit: {
+      calories: round1(calories), protein: round1(protein), carbs: round1(carbs), fat: round1(fat),
+      fiber: round1(fiber), sugar: round1(sugar), satFat: round1(satFat), sodium: round1(sodium),
+    },
   };
 }
 
@@ -101,8 +122,12 @@ const USDA_SEARCH_BASE = "https://api.nal.usda.gov/fdc/v1/foods/search";
 
 // USDA reports energy under different nutrient numbers depending on dataset:
 // SR Legacy foods use the simple "208 Energy"; Foundation foods only publish
-// Atwater-factor variants (957/958). Try each in order.
-const USDA_NUTRIENT_NUMBERS = { calories: ["208", "957", "958"], protein: ["203"], carbs: ["205"], fat: ["204"] };
+// Atwater-factor variants (957/958). Try each in order. Sodium (307) is
+// already reported in mg, unlike OFF which uses grams.
+const USDA_NUTRIENT_NUMBERS = {
+  calories: ["208", "957", "958"], protein: ["203"], carbs: ["205"], fat: ["204"],
+  fiber: ["291"], sugar: ["269"], satFat: ["606"], sodium: ["307"],
+};
 
 function findUsdaNutrient(foodNutrients, numbers) {
   for (const num of numbers) {
@@ -117,6 +142,10 @@ function normalizeUsdaFood(food) {
   const protein = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.protein) ?? 0;
   const carbs = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.carbs) ?? 0;
   const fat = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.fat) ?? 0;
+  const fiber = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.fiber) ?? 0;
+  const sugar = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.sugar) ?? 0;
+  const satFat = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.satFat) ?? 0;
+  const sodium = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.sodium) ?? 0;
   let calories = findUsdaNutrient(fn, USDA_NUTRIENT_NUMBERS.calories);
   // Some entries genuinely don't publish an energy value — derive one from
   // macros (Atwater general factors) rather than showing 0 kcal.
@@ -128,7 +157,10 @@ function normalizeUsdaFood(food) {
     name: food.description || "Unnamed food",
     brand: food.brandOwner || food.brandName || "",
     baseLabel: "100 g",
-    perUnit: { calories: round1(calories), protein: round1(protein), carbs: round1(carbs), fat: round1(fat) },
+    perUnit: {
+      calories: round1(calories), protein: round1(protein), carbs: round1(carbs), fat: round1(fat),
+      fiber: round1(fiber), sugar: round1(sugar), satFat: round1(satFat), sodium: round1(sodium),
+    },
   };
 }
 

@@ -97,8 +97,12 @@ function sumTotals(entries) {
     acc.protein += e.protein || 0;
     acc.carbs += e.carbs || 0;
     acc.fat += e.fat || 0;
+    acc.fiber += e.fiber || 0;
+    acc.sugar += e.sugar || 0;
+    acc.satFat += e.satFat || 0;
+    acc.sodium += e.sodium || 0;
     return acc;
-  }, { calories: 0, protein: 0, carbs: 0, fat: 0 });
+  }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, satFat: 0, sodium: 0 });
 }
 
 async function refreshEntries() {
@@ -224,15 +228,6 @@ function renderProgressBar(current, goal, colorClass) {
 function renderWaterCard() {
   const goals = getGoals();
   const total = sumWater(state.water);
-  const sortedWater = state.water.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-  const rows = sortedWater.length ? sortedWater.map((w) => `
-    <div class="water-row">
-      <span class="water-row-amount">${fmtNum(w.amount)} oz</span>
-      <button class="water-row-del" data-action="delete-water" data-id="${w.id}" aria-label="Delete">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>
-  `).join("") : "";
 
   return `
     <div class="water-card">
@@ -241,7 +236,14 @@ function renderWaterCard() {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5s6.5 7.2 6.5 12a6.5 6.5 0 0 1-13 0c0-4.8 6.5-12 6.5-12Z"/></svg>
           Water
         </span>
-        <span class="water-total">${fmtNum(total)}${goals.water ? ` / ${fmtNum(goals.water)}` : ""} oz</span>
+        <span class="water-header-right">
+          ${state.water.length ? `
+            <button class="water-undo-btn" data-action="undo-last-water" aria-label="Undo last">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6M3 13a9 9 0 1 0 3-6.7L3 9"/></svg>
+            </button>
+          ` : ""}
+          <span class="water-total">${fmtNum(total)}${goals.water ? ` / ${fmtNum(goals.water)}` : ""} oz</span>
+        </span>
       </div>
       ${renderProgressBar(total, goals.water, "water")}
       <div class="water-quick-row" style="margin-top:10px;">
@@ -250,11 +252,6 @@ function renderWaterCard() {
         <button class="water-qty-btn" data-action="water-quick-add" data-amount="20">+20 oz</button>
         <button class="water-qty-btn" data-action="water-quick-add" data-amount="32">+32 oz</button>
       </div>
-      <form id="waterCustomForm" class="water-custom-row">
-        <input type="number" name="amount" placeholder="Custom oz" min="1" step="1">
-        <button type="submit" class="btn btn-secondary btn-sm">Add</button>
-      </form>
-      ${rows ? `<div class="water-list">${rows}</div>` : ""}
     </div>
   `;
 }
@@ -321,6 +318,25 @@ function renderLogView() {
         <span class="total-label">Fat</span>
         <span class="total-value">${fmtNum(totals.fat)}<span class="total-unit">g${goals.fat ? `/${fmtNum(goals.fat)}g` : ""}</span></span>
         ${renderProgressBar(totals.fat, goals.fat, "fat")}
+      </div>
+    </div>
+
+    <div class="totals-row-secondary">
+      <div class="total-card-mini">
+        <span class="total-label">Fiber</span>
+        <span class="total-value">${fmtNum(totals.fiber)}<span class="total-unit">g</span></span>
+      </div>
+      <div class="total-card-mini">
+        <span class="total-label">Sugar</span>
+        <span class="total-value">${fmtNum(totals.sugar)}<span class="total-unit">g</span></span>
+      </div>
+      <div class="total-card-mini">
+        <span class="total-label">Sat Fat</span>
+        <span class="total-value">${fmtNum(totals.satFat)}<span class="total-unit">g</span></span>
+      </div>
+      <div class="total-card-mini">
+        <span class="total-label">Sodium</span>
+        <span class="total-value">${fmtNum(totals.sodium)}<span class="total-unit">mg</span></span>
       </div>
     </div>
 
@@ -616,7 +632,7 @@ function renderScanTab(s) {
     }
     const p = s.product;
     const qty = s.qty;
-    const total = { calories: p.perUnit.calories * qty, protein: p.perUnit.protein * qty, carbs: p.perUnit.carbs * qty, fat: p.perUnit.fat * qty };
+    const total = scaleNutrition(p.perUnit, qty);
     return `
       <div class="product-card">
         <div class="product-name">${escapeHtml(p.name)}</div>
@@ -632,6 +648,12 @@ function renderScanTab(s) {
           <span class="macro-chip p">P ${fmtNum(total.protein)}g</span>
           <span class="macro-chip c">C ${fmtNum(total.carbs)}g</span>
           <span class="macro-chip f">F ${fmtNum(total.fat)}g</span>
+        </div>
+        <div class="macro-chip-row">
+          <span class="macro-chip extra">Fiber ${fmtNum(total.fiber)}g</span>
+          <span class="macro-chip extra">Sugar ${fmtNum(total.sugar)}g</span>
+          <span class="macro-chip extra">Sat Fat ${fmtNum(total.satFat)}g</span>
+          <span class="macro-chip extra">Sodium ${fmtNum(total.sodium)}mg</span>
         </div>
       </div>
       <div class="checkbox-row fav-checkbox-hint">
@@ -649,6 +671,83 @@ function renderScanTab(s) {
     <div class="scan-hint" id="scanDiag">Starting camera…</div>
     <button class="link-btn" data-action="add-sheet-tab" data-tab="manual" style="display:block; text-align:center;">Can't scan it? Enter manually</button>
   `;
+}
+
+// Shared nutrition input grid used by manual entry, the favorite-item
+// builder's manual form, and the edit-entry sheet. `readonly` is set for
+// barcode/search-sourced entries whose values auto-rescale from quantity.
+function renderNutritionInputs(m, { readonly = false } = {}) {
+  const ro = readonly ? "readonly" : "";
+  return `
+    <div class="form-grid-3">
+      <div class="field-wrap">
+        <span class="field-label">Calories</span>
+        <input type="number" name="calories" step="1" min="0" value="${fmtNum(m.calories, 1)}" ${ro} required>
+      </div>
+      <div class="field-wrap">
+        <span class="field-label">Protein (g)</span>
+        <input type="number" name="protein" step="0.1" min="0" value="${fmtNum(m.protein, 1)}" ${ro}>
+      </div>
+      <div class="field-wrap">
+        <span class="field-label">Carbs (g)</span>
+        <input type="number" name="carbs" step="0.1" min="0" value="${fmtNum(m.carbs, 1)}" ${ro}>
+      </div>
+    </div>
+    <div class="form-grid-3">
+      <div class="field-wrap">
+        <span class="field-label">Fat (g)</span>
+        <input type="number" name="fat" step="0.1" min="0" value="${fmtNum(m.fat, 1)}" ${ro}>
+      </div>
+      <div class="field-wrap">
+        <span class="field-label">Fiber (g)</span>
+        <input type="number" name="fiber" step="0.1" min="0" value="${fmtNum(m.fiber, 1)}" ${ro}>
+      </div>
+      <div class="field-wrap">
+        <span class="field-label">Sugar (g)</span>
+        <input type="number" name="sugar" step="0.1" min="0" value="${fmtNum(m.sugar, 1)}" ${ro}>
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="field-wrap">
+        <span class="field-label">Sat Fat (g)</span>
+        <input type="number" name="satFat" step="0.1" min="0" value="${fmtNum(m.satFat, 1)}" ${ro}>
+      </div>
+      <div class="field-wrap">
+        <span class="field-label">Sodium (mg)</span>
+        <input type="number" name="sodium" step="1" min="0" value="${fmtNum(m.sodium, 1)}" ${ro}>
+      </div>
+    </div>
+  `;
+}
+
+// Scales a barcode/search-sourced perUnit nutrition object by a quantity
+// multiplier, producing the flat fields an entry/favorite-item stores.
+function scaleNutrition(perUnit, qty) {
+  return {
+    calories: round1((perUnit.calories || 0) * qty),
+    protein: round1((perUnit.protein || 0) * qty),
+    carbs: round1((perUnit.carbs || 0) * qty),
+    fat: round1((perUnit.fat || 0) * qty),
+    fiber: round1((perUnit.fiber || 0) * qty),
+    sugar: round1((perUnit.sugar || 0) * qty),
+    satFat: round1((perUnit.satFat || 0) * qty),
+    sodium: round1((perUnit.sodium || 0) * qty),
+  };
+}
+
+// Reads the 8 nutrition fields back out of a submitted FormData for the
+// forms built with renderNutritionInputs.
+function readNutritionFields(fd) {
+  return {
+    calories: parseFloat(fd.get("calories")) || 0,
+    protein: parseFloat(fd.get("protein")) || 0,
+    carbs: parseFloat(fd.get("carbs")) || 0,
+    fat: parseFloat(fd.get("fat")) || 0,
+    fiber: parseFloat(fd.get("fiber")) || 0,
+    sugar: parseFloat(fd.get("sugar")) || 0,
+    satFat: parseFloat(fd.get("satFat")) || 0,
+    sodium: parseFloat(fd.get("sodium")) || 0,
+  };
 }
 
 function renderManualTab(s) {
@@ -692,26 +791,7 @@ function renderManualTab(s) {
           <input type="text" name="unit" placeholder="e.g. serving, g, cup" value="${escapeHtml(m.unit)}" required>
         </div>
       </div>
-      <div class="form-grid-3">
-        <div class="field-wrap">
-          <span class="field-label">Calories</span>
-          <input type="number" name="calories" step="1" min="0" value="${m.calories}" required>
-        </div>
-        <div class="field-wrap">
-          <span class="field-label">Protein (g)</span>
-          <input type="number" name="protein" step="0.1" min="0" value="${m.protein}">
-        </div>
-        <div class="field-wrap">
-          <span class="field-label">Carbs (g)</span>
-          <input type="number" name="carbs" step="0.1" min="0" value="${m.carbs}">
-        </div>
-      </div>
-      <div class="form-grid">
-        <div class="field-wrap">
-          <span class="field-label">Fat (g)</span>
-          <input type="number" name="fat" step="0.1" min="0" value="${m.fat}">
-        </div>
-      </div>
+      ${renderNutritionInputs(m)}
       <div class="checkbox-row">
         <input type="checkbox" id="manualSaveFav" ${s.saveFav ? "checked" : ""}>
         <label for="manualSaveFav">Save as favorite too</label>
@@ -773,26 +853,7 @@ function renderEditEntrySheet(s) {
         </div>
       </div>
       ${canRescale ? `<div class="scan-hint" style="text-align:left; margin:-2px 0 10px;">Nutrition values below scale automatically with quantity for scanned items.</div>` : ""}
-      <div class="form-grid-3">
-        <div class="field-wrap">
-          <span class="field-label">Calories</span>
-          <input type="number" name="calories" step="1" min="0" value="${fmtNum(e.calories,1)}" ${canRescale ? "readonly" : ""} required>
-        </div>
-        <div class="field-wrap">
-          <span class="field-label">Protein (g)</span>
-          <input type="number" name="protein" step="0.1" min="0" value="${fmtNum(e.protein,1)}" ${canRescale ? "readonly" : ""}>
-        </div>
-        <div class="field-wrap">
-          <span class="field-label">Carbs (g)</span>
-          <input type="number" name="carbs" step="0.1" min="0" value="${fmtNum(e.carbs,1)}" ${canRescale ? "readonly" : ""}>
-        </div>
-      </div>
-      <div class="form-grid">
-        <div class="field-wrap">
-          <span class="field-label">Fat (g)</span>
-          <input type="number" name="fat" step="0.1" min="0" value="${fmtNum(e.fat,1)}" ${canRescale ? "readonly" : ""}>
-        </div>
-      </div>
+      ${renderNutritionInputs(e, { readonly: canRescale })}
       <button type="submit" class="btn btn-primary btn-block" style="margin-bottom:8px;">Save Changes</button>
       <button type="button" class="btn btn-danger btn-block" data-action="delete-entry" data-id="${e.id}">Delete Entry</button>
     </form>
@@ -873,7 +934,7 @@ function renderAddItemScan(ai) {
       `;
     }
     const p = ai.product, qty = ai.qty;
-    const total = { calories: p.perUnit.calories * qty, protein: p.perUnit.protein * qty, carbs: p.perUnit.carbs * qty, fat: p.perUnit.fat * qty };
+    const total = scaleNutrition(p.perUnit, qty);
     return `
       <div class="product-card">
         <div class="product-name">${escapeHtml(p.name)}</div>
@@ -889,6 +950,12 @@ function renderAddItemScan(ai) {
           <span class="macro-chip p">P ${fmtNum(total.protein)}g</span>
           <span class="macro-chip c">C ${fmtNum(total.carbs)}g</span>
           <span class="macro-chip f">F ${fmtNum(total.fat)}g</span>
+        </div>
+        <div class="macro-chip-row">
+          <span class="macro-chip extra">Fiber ${fmtNum(total.fiber)}g</span>
+          <span class="macro-chip extra">Sugar ${fmtNum(total.sugar)}g</span>
+          <span class="macro-chip extra">Sat Fat ${fmtNum(total.satFat)}g</span>
+          <span class="macro-chip extra">Sodium ${fmtNum(total.sodium)}mg</span>
         </div>
       </div>
       <button class="btn btn-primary btn-block" data-action="confirm-additem-scan">Add Item</button>
@@ -919,26 +986,7 @@ function renderAddItemManual() {
           <input type="text" name="unit" placeholder="e.g. cup" value="serving" required>
         </div>
       </div>
-      <div class="form-grid-3">
-        <div class="field-wrap">
-          <span class="field-label">Calories</span>
-          <input type="number" name="calories" step="1" min="0" value="0" required>
-        </div>
-        <div class="field-wrap">
-          <span class="field-label">Protein (g)</span>
-          <input type="number" name="protein" step="0.1" min="0" value="0">
-        </div>
-        <div class="field-wrap">
-          <span class="field-label">Carbs (g)</span>
-          <input type="number" name="carbs" step="0.1" min="0" value="0">
-        </div>
-      </div>
-      <div class="form-grid">
-        <div class="field-wrap">
-          <span class="field-label">Fat (g)</span>
-          <input type="number" name="fat" step="0.1" min="0" value="0">
-        </div>
-      </div>
+      ${renderNutritionInputs({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, satFat: 0, sodium: 0 })}
       <button type="submit" class="btn btn-secondary btn-block">Add Item</button>
     </form>
   `;
@@ -1076,7 +1124,7 @@ function onScanFailure(msg) {
 // ============================================================================
 
 function newManualDraft() {
-  return { name: "", quantity: 1, unit: "serving", calories: 0, protein: 0, carbs: 0, fat: 0 };
+  return { name: "", quantity: 1, unit: "serving", calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, satFat: 0, sodium: 0 };
 }
 
 function newManualSearchState() {
@@ -1136,10 +1184,7 @@ async function handleAction(action, ds, el) {
     case "pick-search-result": {
       const r = state.sheet.manualSearch.results[parseInt(ds.index, 10)];
       if (r) {
-        state.sheet.manual = {
-          name: r.name, quantity: 1, unit: r.baseLabel,
-          calories: r.perUnit.calories, protein: r.perUnit.protein, carbs: r.perUnit.carbs, fat: r.perUnit.fat,
-        };
+        state.sheet.manual = { name: r.name, quantity: 1, unit: r.baseLabel, ...r.perUnit };
         state.sheet.manualSearch.results = [];
       }
       renderSheetRoot();
@@ -1158,10 +1203,7 @@ async function handleAction(action, ds, el) {
       const entry = {
         id: uuid(), date: state.logDate, meal: s.meal,
         name: p.name, quantity: s.qty, unit: p.baseLabel,
-        calories: round1(p.perUnit.calories * s.qty),
-        protein: round1(p.perUnit.protein * s.qty),
-        carbs: round1(p.perUnit.carbs * s.qty),
-        fat: round1(p.perUnit.fat * s.qty),
+        ...scaleNutrition(p.perUnit, s.qty),
         perUnit: p.perUnit, source: "barcode", barcode: p.barcode, createdAt: Date.now(),
       };
       await dbAddEntry(entry);
@@ -1215,6 +1257,15 @@ async function handleAction(action, ds, el) {
       await dbDeleteWater(ds.id);
       await refreshWater();
       renderMain();
+      break;
+    }
+    case "undo-last-water": {
+      const last = state.water.reduce((a, b) => (!a || (b.createdAt || 0) > (a.createdAt || 0) ? b : a), null);
+      if (last) {
+        await dbDeleteWater(last.id);
+        await refreshWater();
+        renderMain();
+      }
       break;
     }
 
@@ -1273,10 +1324,7 @@ async function handleAction(action, ds, el) {
       const p = ai.product;
       state.sheet.items.push({
         name: p.name, quantity: ai.qty, unit: p.baseLabel,
-        calories: round1(p.perUnit.calories * ai.qty),
-        protein: round1(p.perUnit.protein * ai.qty),
-        carbs: round1(p.perUnit.carbs * ai.qty),
-        fat: round1(p.perUnit.fat * ai.qty),
+        ...scaleNutrition(p.perUnit, ai.qty),
         perUnit: p.perUnit,
       });
       state.sheet.addingItem = null;
@@ -1360,7 +1408,12 @@ async function saveEntryAsFavorite(entry) {
   const fav = {
     id: uuid(),
     name: entry.name,
-    items: [{ name: entry.name, quantity: entry.quantity, unit: entry.unit, calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat, perUnit: entry.perUnit || null }],
+    items: [{
+      name: entry.name, quantity: entry.quantity, unit: entry.unit,
+      calories: entry.calories, protein: entry.protein, carbs: entry.carbs, fat: entry.fat,
+      fiber: entry.fiber, sugar: entry.sugar, satFat: entry.satFat, sodium: entry.sodium,
+      perUnit: entry.perUnit || null,
+    }],
     createdAt: Date.now(), updatedAt: Date.now(),
   };
   await dbAddFavorite(fav);
@@ -1371,6 +1424,7 @@ async function logFavoriteToMeal(fav, meal, date) {
     id: uuid(), date, meal,
     name: item.name, quantity: item.quantity, unit: item.unit,
     calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat,
+    fiber: item.fiber || 0, sugar: item.sugar || 0, satFat: item.satFat || 0, sodium: item.sodium || 0,
     perUnit: item.perUnit || null, source: "favorite", barcode: null, createdAt: Date.now(),
   })));
 }
@@ -1437,17 +1491,6 @@ function attachGlobalListeners() {
       return;
     }
 
-    if (e.target.id === "waterCustomForm") {
-      e.preventDefault();
-      const amount = parseFloat(new FormData(e.target).get("amount"));
-      if (amount > 0) {
-        await dbAddWater({ id: uuid(), date: state.logDate, amount, createdAt: Date.now() });
-        await refreshWater();
-        renderMain();
-      }
-      return;
-    }
-
     if (e.target.id === "manualEntryForm") {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -1457,10 +1500,7 @@ function attachGlobalListeners() {
         name: fd.get("name").trim(),
         quantity: parseFloat(fd.get("quantity")) || 1,
         unit: fd.get("unit").trim() || "serving",
-        calories: parseFloat(fd.get("calories")) || 0,
-        protein: parseFloat(fd.get("protein")) || 0,
-        carbs: parseFloat(fd.get("carbs")) || 0,
-        fat: parseFloat(fd.get("fat")) || 0,
+        ...readNutritionFields(fd),
         perUnit: null, source: "manual", barcode: s.scannedBarcode || null, createdAt: Date.now(),
       };
       const saveFav = !!document.getElementById("manualSaveFav")?.checked;
@@ -1481,15 +1521,17 @@ function attachGlobalListeners() {
       const quantity = parseFloat(fd.get("quantity")) || 1;
       const updated = { ...s.entry, name: fd.get("name").trim(), meal: fd.get("meal"), quantity, unit: fd.get("unit").trim() };
       if (s.entry.perUnit) {
-        updated.calories = round1(s.entry.perUnit.calories * quantity);
-        updated.protein = round1(s.entry.perUnit.protein * quantity);
-        updated.carbs = round1(s.entry.perUnit.carbs * quantity);
-        updated.fat = round1(s.entry.perUnit.fat * quantity);
+        const pu = s.entry.perUnit;
+        updated.calories = round1(pu.calories * quantity);
+        updated.protein = round1(pu.protein * quantity);
+        updated.carbs = round1(pu.carbs * quantity);
+        updated.fat = round1(pu.fat * quantity);
+        updated.fiber = round1((pu.fiber || 0) * quantity);
+        updated.sugar = round1((pu.sugar || 0) * quantity);
+        updated.satFat = round1((pu.satFat || 0) * quantity);
+        updated.sodium = round1((pu.sodium || 0) * quantity);
       } else {
-        updated.calories = parseFloat(fd.get("calories")) || 0;
-        updated.protein = parseFloat(fd.get("protein")) || 0;
-        updated.carbs = parseFloat(fd.get("carbs")) || 0;
-        updated.fat = parseFloat(fd.get("fat")) || 0;
+        Object.assign(updated, readNutritionFields(fd));
       }
       await dbUpdateEntry(updated);
       await refreshEntries();
@@ -1506,10 +1548,7 @@ function attachGlobalListeners() {
         name: fd.get("name").trim(),
         quantity: parseFloat(fd.get("quantity")) || 1,
         unit: fd.get("unit").trim() || "serving",
-        calories: parseFloat(fd.get("calories")) || 0,
-        protein: parseFloat(fd.get("protein")) || 0,
-        carbs: parseFloat(fd.get("carbs")) || 0,
-        fat: parseFloat(fd.get("fat")) || 0,
+        ...readNutritionFields(fd),
         perUnit: null,
       });
       state.sheet.addingItem = null;
@@ -1546,10 +1585,10 @@ function attachGlobalListeners() {
       if (perUnit) {
         const q = parseFloat(e.target.value) || 0;
         const form = e.target.closest("#editEntryForm");
-        form.querySelector('[name="calories"]').value = round1(perUnit.calories * q);
-        form.querySelector('[name="protein"]').value = round1(perUnit.protein * q);
-        form.querySelector('[name="carbs"]').value = round1(perUnit.carbs * q);
-        form.querySelector('[name="fat"]').value = round1(perUnit.fat * q);
+        ["calories", "protein", "carbs", "fat", "fiber", "sugar", "satFat", "sodium"].forEach((field) => {
+          const input = form.querySelector(`[name="${field}"]`);
+          if (input) input.value = round1((perUnit[field] || 0) * q);
+        });
       }
     }
   });
