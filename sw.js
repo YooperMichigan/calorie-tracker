@@ -1,0 +1,62 @@
+// Bump this version string whenever app files change, so clients pick up the update.
+const CACHE_NAME = "calorie-tracker-v3";
+
+const PRECACHE_URLS = [
+  "./",
+  "./index.html",
+  "./manifest.json",
+  "./css/styles.css",
+  "./js/db.js",
+  "./js/utils.js",
+  "./js/foodApi.js",
+  "./js/barcode.js",
+  "./js/charts.js",
+  "./js/backup.js",
+  "./js/app.js",
+  "./vendor/html5-qrcode.min.js",
+  "./icons/icon-180.png",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/icon-512-maskable.png",
+  "./icons/favicon-32.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((names) =>
+      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+    ).then(() => self.clients.claim())
+  );
+});
+
+// Cache-first for same-origin GET requests, with a background refresh so the
+// cache stays current on the next load. Falls back to cache if offline.
+// Cross-origin requests (e.g. Open Food Facts API lookups) are left alone so
+// they hit the network directly and fail gracefully in the app when offline.
+self.addEventListener("fetch", (event) => {
+  const req = event.request;
+  if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
+
+  event.respondWith(
+    caches.match(req).then((cached) => {
+      const network = fetch(req)
+        .then((res) => {
+          if (res && res.status === 200) {
+            const copy = res.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => cached);
+      return cached || network;
+    })
+  );
+});
