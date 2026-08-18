@@ -35,48 +35,58 @@ const BarcodeScanner = (() => {
     let fired = false;
     let frameCount = 0;
 
-    try {
-      await instance.start(
-        // `ideal` (not a bare string) so cameras that don't report a
-        // "environment"-facing lens — like a fixed iMac/laptop webcam —
-        // still get picked instead of failing to start.
-        { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-        // No qrbox: scans the full video frame instead of requiring the
-        // barcode to be aligned inside a small on-screen box, which is a
-        // common reason scanning silently "does nothing."
-        { fps: 10 },
-        (decodedText) => {
-          if (fired) return;
-          fired = true;
-          onDetected(decodedText);
-        },
-        (errorMessage) => {
-          // Fires on every frame where no code was found — this is normal,
-          // expected noise, not a real error. Surfaced here only so we can
-          // confirm the decode loop is actually running.
-          frameCount++;
-          if (onDiag && frameCount % 8 === 0) {
-            const videoEl = document.querySelector(`#${elementId} video`);
-            onDiag({
-              running: true,
-              frameCount,
-              lastMessage: errorMessage,
-              videoWidth: videoEl ? videoEl.videoWidth : 0,
-              videoHeight: videoEl ? videoEl.videoHeight : 0,
-              videoReadyState: videoEl ? videoEl.readyState : -1,
-            });
-          }
-        }
-      );
-      running = true;
-      if (onDiag) onDiag({ started: true });
-    } catch (err) {
-      running = false;
-      const msg = (err && err.toString().toLowerCase().includes("permission"))
-        ? "Camera permission denied. Enable camera access for this site in Settings."
-        : "Couldn't start the camera. Your browser may not support camera access here.";
-      onError(msg);
+    const successCallback = (decodedText) => {
+      if (fired) return;
+      fired = true;
+      onDetected(decodedText);
+    };
+    const decodeFailCallback = (errorMessage) => {
+      // Fires on every frame where no code was found — this is normal,
+      // expected noise, not a real error. Surfaced here only so we can
+      // confirm the decode loop is actually running.
+      frameCount++;
+      if (onDiag && frameCount % 8 === 0) {
+        const videoEl = document.querySelector(`#${elementId} video`);
+        onDiag({
+          running: true,
+          frameCount,
+          lastMessage: errorMessage,
+          videoWidth: videoEl ? videoEl.videoWidth : 0,
+          videoHeight: videoEl ? videoEl.videoHeight : 0,
+          videoReadyState: videoEl ? videoEl.readyState : -1,
+        });
+      }
+    };
+
+    // Try the standard mobile pattern first (plain "environment" string —
+    // the form used in virtually every html5-qrcode example and known to
+    // work on iOS Safari). If that's rejected (e.g. a desktop webcam with
+    // no rear-facing lens, like an iMac), fall back to whatever camera is
+    // available with no facingMode constraint at all.
+    const attempts = [
+      { facingMode: "environment" },
+      {},
+    ];
+
+    let lastErr = null;
+    for (const cameraConfig of attempts) {
+      try {
+        await instance.start(cameraConfig, { fps: 10 }, successCallback, decodeFailCallback);
+        running = true;
+        if (onDiag) onDiag({ started: true, cameraConfig });
+        return;
+      } catch (err) {
+        lastErr = err;
+      }
     }
+
+    running = false;
+    const raw = lastErr ? `${lastErr.name || ""} ${lastErr.message || lastErr}`.trim() : "Unknown error";
+    const lower = raw.toLowerCase();
+    const msg = (lower.includes("permission") || lower.includes("notallowed") || lower.includes("denied"))
+      ? `Camera permission denied. Enable camera access for this site in Settings. (${raw})`
+      : `Couldn't start the camera: ${raw}`;
+    onError(msg);
   }
 
   async function stop() {
