@@ -31,7 +31,6 @@ const BarcodeScanner = (() => {
     }
     if (running) await stop();
 
-    instance = new Html5Qrcode(elementId, { formatsToSupport: FORMATS, verbose: false });
     let fired = false;
     let frameCount = 0;
 
@@ -74,13 +73,22 @@ const BarcodeScanner = (() => {
 
     let lastErr = null;
     for (const cameraConfig of attempts) {
+      // A fresh instance per attempt — reusing one Html5Qrcode across
+      // multiple start() calls can leave its internal state machine
+      // mid-transition after a failed attempt, so the next start() fails
+      // with "Cannot transition to a new state, already under transition"
+      // even though the camera itself would have been fine.
+      const attemptInstance = new Html5Qrcode(elementId, { formatsToSupport: FORMATS, verbose: false });
       try {
-        await instance.start(cameraConfig, { fps: 10 }, successCallback, decodeFailCallback);
+        await attemptInstance.start(cameraConfig, { fps: 10 }, successCallback, decodeFailCallback);
+        instance = attemptInstance;
         running = true;
         if (onDiag) onDiag({ started: true, cameraConfig });
         return;
       } catch (err) {
         lastErr = err;
+        try { await attemptInstance.stop(); } catch (e) { /* never started */ }
+        try { attemptInstance.clear(); } catch (e) { /* nothing to clear */ }
       }
     }
 
