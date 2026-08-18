@@ -60,10 +60,14 @@ const BarcodeScanner = (() => {
 
     // Try the standard mobile pattern first (plain "environment" string —
     // the form used in virtually every html5-qrcode example and known to
-    // work on iOS Safari). If that's rejected (e.g. a desktop webcam with
-    // no rear-facing lens, like an iMac), fall back to whatever camera is
-    // available with no facingMode constraint at all.
+    // work on iOS Safari), requesting a sharper stream since 1D barcodes
+    // need real resolution to decode reliably. width/height are `ideal`
+    // (soft) constraints so they can't cause a hard start failure the way
+    // `exact` would. If rejected (e.g. a desktop webcam with no
+    // rear-facing lens, like an iMac), fall back to whatever camera is
+    // available with no constraints at all.
     const attempts = [
+      { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
       { facingMode: "environment" },
       {},
     ];

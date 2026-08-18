@@ -534,7 +534,7 @@ function renderScanTab(s) {
 
   return `
     <div class="scan-wrap"><div id="qr-reader"></div></div>
-    <div class="scan-hint">Point the camera at a barcode (UPC/EAN).</div>
+    <div class="scan-hint">Hold the barcode flat, well-lit, and steady, filling most of the frame.</div>
     <div class="scan-hint" id="scanDiag">Starting camera…</div>
     <button class="link-btn" data-action="add-sheet-tab" data-tab="manual" style="display:block; text-align:center;">Can't scan it? Enter manually</button>
   `;
