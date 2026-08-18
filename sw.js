@@ -1,5 +1,5 @@
 // Bump this version string whenever app files change, so clients pick up the update.
-const CACHE_NAME = "calorie-tracker-v8";
+const CACHE_NAME = "calorie-tracker-v9";
 
 const PRECACHE_URLS = [
   "./",
@@ -24,7 +24,14 @@ const PRECACHE_URLS = [
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then((cache) => Promise.all(
+        // Manual fetch + put (rather than cache.addAll, which doesn't take
+        // per-request options) so precaching can't silently pull a
+        // browser-HTTP-cached stale copy either.
+        PRECACHE_URLS.map((url) =>
+          fetch(url, { cache: "no-store" }).then((res) => cache.put(url, res))
+        )
+      ))
       .then(() => self.skipWaiting())
   );
 });
@@ -47,8 +54,12 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
 
+  // cache: "no-store" so this always goes to the network instead of being
+  // silently satisfied by the browser's own HTTP cache (GitHub Pages sends
+  // Cache-Control: max-age=600 on these files) — otherwise "network-first"
+  // can still serve a response up to 10 minutes stale.
   event.respondWith(
-    fetch(req)
+    fetch(req, { cache: "no-store" })
       .then((res) => {
         if (res && res.status === 200) {
           const copy = res.clone();
