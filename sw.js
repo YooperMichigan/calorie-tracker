@@ -1,5 +1,5 @@
 // Bump this version string whenever app files change, so clients pick up the update.
-const CACHE_NAME = "calorie-tracker-v4";
+const CACHE_NAME = "calorie-tracker-v5";
 
 const PRECACHE_URLS = [
   "./",
@@ -37,26 +37,25 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Cache-first for same-origin GET requests, with a background refresh so the
-// cache stays current on the next load. Falls back to cache if offline.
-// Cross-origin requests (e.g. Open Food Facts API lookups) are left alone so
-// they hit the network directly and fail gracefully in the app when offline.
+// Network-first for same-origin GET requests: always try the network so you
+// get the current deployed code while online (this app updates fairly
+// often), and only fall back to the cache when there's no network — which is
+// the one case offline support actually needs to cover. Cross-origin
+// requests (e.g. Open Food Facts API lookups) are left alone so they hit the
+// network directly and fail gracefully in the app when offline.
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET" || new URL(req.url).origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.status === 200) {
-            const copy = res.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+    fetch(req)
+      .then((res) => {
+        if (res && res.status === 200) {
+          const copy = res.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req))
   );
 });
