@@ -1,21 +1,33 @@
-// Lightweight, dependency-free SVG chart builders. Colors are hardcoded to match
-// css/styles.css (this app has a single fixed dark theme, so no var() needed).
+// Lightweight, dependency-free SVG chart builders. SVG attributes (fill,
+// stroke) don't participate in the cascade the way CSS properties do, so
+// they can't just reference var(--x) reliably here — instead we read the
+// live computed CSS custom property values each time a chart is built,
+// which keeps charts in sync with the current light/dark theme without
+// needing to duplicate the palette in JS.
 
-const CHART_COLORS = {
-  accent: "#ff7a45",
-  muted: "#8b948f",
-  mutedDim: "#5f6864",
-  grid: "#262c2a",
-  protein: "#6fbf8a",
-  carbs: "#e0b354",
-  fat: "#e0708a",
-  breakfast: "#ff7a45",
-  lunch: "#6fbf8a",
-  dinner: "#7aa7e0",
-  snacks: "#e0b354",
-};
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function getChartColors() {
+  return {
+    accent: cssVar("--accent"),
+    muted: cssVar("--muted"),
+    mutedDim: cssVar("--muted-2"),
+    grid: cssVar("--border"),
+    text: cssVar("--text"),
+    protein: cssVar("--protein"),
+    carbs: cssVar("--carbs"),
+    fat: cssVar("--fat"),
+    breakfast: cssVar("--meal-breakfast"),
+    lunch: cssVar("--meal-lunch"),
+    dinner: cssVar("--meal-dinner"),
+    snacks: cssVar("--meal-snacks"),
+  };
+}
 
 function svgBarChart(data, opts = {}) {
+  const C = getChartColors();
   const width = opts.width || 320, height = opts.height || 170;
   const pad = { top: 16, right: 10, bottom: 22, left: 10 };
   const chartW = width - pad.left - pad.right;
@@ -26,18 +38,18 @@ function svgBarChart(data, opts = {}) {
 
   const gridLines = [0.25, 0.5, 0.75, 1].map((f) => {
     const y = pad.top + chartH * (1 - f);
-    return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="${CHART_COLORS.grid}" stroke-width="1"/>`;
+    return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="${C.grid}" stroke-width="1"/>`;
   }).join("");
 
   const bars = data.map((d, i) => {
     const x = pad.left + i * slot + (slot - barW) / 2;
     const barH = Math.max(2, (d.value / max) * chartH);
     const y = pad.top + chartH - barH;
-    const color = d.color || CHART_COLORS.accent;
+    const color = d.color || C.accent;
     const label = escapeHtml(d.label);
     return `
       <rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${barH.toFixed(1)}" rx="4" fill="${color}"/>
-      <text x="${(x + barW / 2).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="9.5" fill="${CHART_COLORS.muted}">${label}</text>
+      <text x="${(x + barW / 2).toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="9.5" fill="${C.muted}">${label}</text>
     `;
   }).join("");
 
@@ -45,6 +57,7 @@ function svgBarChart(data, opts = {}) {
 }
 
 function svgLineChart(data, opts = {}) {
+  const C = getChartColors();
   const width = opts.width || 320, height = opts.height || 170;
   const pad = { top: 16, right: 10, bottom: 22, left: 10 };
   const chartW = width - pad.left - pad.right;
@@ -52,11 +65,11 @@ function svgLineChart(data, opts = {}) {
   const max = Math.max(1, ...data.map((d) => d.value)) * 1.15;
   const n = data.length;
   const stepX = n > 1 ? chartW / (n - 1) : 0;
-  const color = opts.color || CHART_COLORS.accent;
+  const color = opts.color || C.accent;
 
   const gridLines = [0.25, 0.5, 0.75, 1].map((f) => {
     const y = pad.top + chartH * (1 - f);
-    return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="${CHART_COLORS.grid}" stroke-width="1"/>`;
+    return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="${C.grid}" stroke-width="1"/>`;
   }).join("");
 
   const points = data.map((d, i) => {
@@ -74,7 +87,7 @@ function svgLineChart(data, opts = {}) {
   const labelEvery = Math.ceil(n / 7);
   const labels = points.map((p, i) => {
     if (i % labelEvery !== 0 && i !== n - 1) return "";
-    return `<text x="${p.x.toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="9" fill="${CHART_COLORS.muted}">${escapeHtml(p.label)}</text>`;
+    return `<text x="${p.x.toFixed(1)}" y="${height - 6}" text-anchor="middle" font-size="9" fill="${C.muted}">${escapeHtml(p.label)}</text>`;
   }).join("");
 
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="xMidYMid meet">
@@ -87,6 +100,7 @@ function svgLineChart(data, opts = {}) {
 }
 
 function svgDonutChart(segments, opts = {}) {
+  const C = getChartColors();
   const size = opts.size || 160;
   const thickness = opts.thickness || 20;
   const r = (size - thickness) / 2;
@@ -104,10 +118,10 @@ function svgDonutChart(segments, opts = {}) {
     return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${seg.color}" stroke-width="${thickness}" stroke-dasharray="${dasharray}" stroke-dashoffset="${dashoffset.toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
   }).join("");
 
-  const bg = total === 0 ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${CHART_COLORS.grid}" stroke-width="${thickness}"/>` : "";
+  const bg = total === 0 ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${C.grid}" stroke-width="${thickness}"/>` : "";
 
-  const centerTop = opts.centerValue ? `<text x="${cx}" y="${cy - 3}" text-anchor="middle" font-size="17" font-weight="600" fill="#eceeec">${escapeHtml(opts.centerValue)}</text>` : "";
-  const centerBottom = opts.centerLabel ? `<text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="10" fill="${CHART_COLORS.muted}">${escapeHtml(opts.centerLabel)}</text>` : "";
+  const centerTop = opts.centerValue ? `<text x="${cx}" y="${cy - 3}" text-anchor="middle" font-size="17" font-weight="600" fill="${C.text}">${escapeHtml(opts.centerValue)}</text>` : "";
+  const centerBottom = opts.centerLabel ? `<text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="10" fill="${C.muted}">${escapeHtml(opts.centerLabel)}</text>` : "";
 
   return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}">
     ${bg}${arcs}

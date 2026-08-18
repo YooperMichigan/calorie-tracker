@@ -1,4 +1,76 @@
 :root {
+  /* Light theme (default). Macro/status colors are deliberately deeper and
+     more saturated than their dark-theme counterparts below — the pastel
+     values tuned to pop against a near-black background read as washed-out
+     and low-contrast against white. */
+  --bg: #f3f4f2;
+  --card: #ffffff;
+  --card-2: #eef1ee;
+  --border: #e1e5e0;
+  --border-input: #d1d6cf;
+  --text: #1b201e;
+  --muted: #6b746e;
+  --muted-2: #a2aba4;
+  --accent: #ff7a45;
+  --accent-bg: #fff0e7;
+  --accent-border: #ffcfb0;
+  --protein: #2f9c5c;
+  --protein-bg: #e8f7ee;
+  --protein-border: #b9e5c9;
+  --carbs: #b9821a;
+  --carbs-bg: #fbf1de;
+  --fat: #d1567e;
+  --fat-bg: #fceef3;
+  --red: #d1483d;
+  --red-bg: #fdeeec;
+  --red-border: #f6cdc7;
+  --water: #1f7bb0;
+  --water-bg: #e7f3fa;
+  --water-border: #cde6f5;
+  --meal-breakfast: #ff7a45;
+  --meal-lunch: #2f9c5c;
+  --meal-dinner: #3a7fc4;
+  --meal-snacks: #b9821a;
+  --tab-bar-bg: rgba(243, 244, 242, 0.85);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* System prefers dark, and the user hasn't explicitly forced light. */
+  :root:not([data-theme="light"]) {
+    --bg: #101413;
+    --card: #181d1c;
+    --card-2: #1f2624;
+    --border: #262c2a;
+    --border-input: #2f3634;
+    --text: #eceeec;
+    --muted: #8b948f;
+    --muted-2: #5f6864;
+    --accent: #ff7a45;
+    --accent-bg: #2a1c15;
+    --accent-border: #4a2e1e;
+    --protein: #6fbf8a;
+    --protein-bg: #1a2620;
+    --protein-border: #2e3d34;
+    --carbs: #e0b354;
+    --carbs-bg: #2a2318;
+    --fat: #e0708a;
+    --fat-bg: #2a1c21;
+    --red: #e2685c;
+    --red-bg: #2a1c1a;
+    --red-border: #3d2925;
+    --water: #5aa9d6;
+    --water-bg: #16232b;
+    --water-border: #223442;
+    --meal-breakfast: #ff7a45;
+    --meal-lunch: #6fbf8a;
+    --meal-dinner: #7aa7e0;
+    --meal-snacks: #e0b354;
+    --tab-bar-bg: rgba(16, 20, 19, 0.92);
+  }
+}
+
+:root[data-theme="dark"] {
+  /* Manual override to dark, regardless of system preference. */
   --bg: #101413;
   --card: #181d1c;
   --card-2: #1f2624;
@@ -12,6 +84,7 @@
   --accent-border: #4a2e1e;
   --protein: #6fbf8a;
   --protein-bg: #1a2620;
+  --protein-border: #2e3d34;
   --carbs: #e0b354;
   --carbs-bg: #2a2318;
   --fat: #e0708a;
@@ -19,6 +92,14 @@
   --red: #e2685c;
   --red-bg: #2a1c1a;
   --red-border: #3d2925;
+  --water: #5aa9d6;
+  --water-bg: #16232b;
+  --water-border: #223442;
+  --meal-breakfast: #ff7a45;
+  --meal-lunch: #6fbf8a;
+  --meal-dinner: #7aa7e0;
+  --meal-snacks: #e0b354;
+  --tab-bar-bg: rgba(16, 20, 19, 0.92);
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -56,7 +137,7 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
 
 /* ---------- tab bar (Log / My Meals / Summary) ---------- */
 .tab-bar {
-  position: fixed; left: 0; right: 0; bottom: 0; background: rgba(16,20,19,0.92);
+  position: fixed; left: 0; right: 0; bottom: 0; background: var(--tab-bar-bg);
   backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
   border-top: 1px solid var(--border); display: flex; z-index: 40;
   padding-bottom: env(safe-area-inset-bottom);
@@ -166,7 +247,7 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
   transition: opacity 0.25s, transform 0.25s;
 }
 .toast.error { color: var(--red); border-color: var(--red-border); background: var(--red-bg); }
-.toast.success { color: var(--protein); border-color: #2e3d34; background: var(--protein-bg); }
+.toast.success { color: var(--protein); border-color: var(--protein-border); background: var(--protein-bg); }
 
 /* ---------- modal / bottom sheet ---------- */
 .overlay {
@@ -289,7 +370,6 @@ svg text { font-family: -apple-system, sans-serif; }
 .fav-checkbox-hint { display: flex; align-items: center; gap: 6px; }
 
 /* ---------- water tracking ---------- */
-:root { --water: #5aa9d6; --water-bg: #16232b; --water-border: #223442; }
 .water-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
 .water-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
 .water-title { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }

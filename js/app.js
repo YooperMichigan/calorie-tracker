@@ -21,6 +21,7 @@ const state = {
 };
 
 async function init() {
+  applyTheme(getThemePref());
   ensureHiddenInputs();
   state.entries = await dbGetEntriesForDate(state.logDate);
   state.favorites = await dbGetAllFavorites();
@@ -45,6 +46,30 @@ function getGoals() {
 
 function setGoals(goals) {
   localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
+}
+
+// ---------- theme ----------
+
+const THEME_KEY = "calorieTrackerTheme"; // "light" | "dark" | absent = system
+
+function getThemePref() {
+  return localStorage.getItem(THEME_KEY) || "system";
+}
+
+// Applies the theme to the document and (optionally) re-renders, since the
+// SVG charts bake in resolved hex colors at render time — a CSS variable
+// change alone won't update an already-rendered chart's fill attributes.
+function applyTheme(pref, { rerender = false } = {}) {
+  if (pref === "light" || pref === "dark") {
+    localStorage.setItem(THEME_KEY, pref);
+    document.documentElement.setAttribute("data-theme", pref);
+  } else {
+    localStorage.removeItem(THEME_KEY);
+    document.documentElement.removeAttribute("data-theme");
+  }
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", cssVar("--bg"));
+  if (rerender) renderAll();
 }
 
 function ensureHiddenInputs() {
@@ -389,6 +414,7 @@ function renderWeeklySummary() {
   if (!state.weeklyData) return `<div class="chart-empty">Loading…</div>`;
   const d = state.weeklyData;
   const goals = getGoals();
+  const C = getChartColors();
   const isCurrentWeek = weekRangeFor(todayISO()).start === d.range.start;
 
   const barData = d.dailyTotals.map((day) => ({
@@ -400,9 +426,9 @@ function renderWeeklySummary() {
   const macroTotalKcal = pKcal + cKcal + fKcal;
   const donut = svgDonutChart(
     [
-      { label: "Protein", value: pKcal, color: CHART_COLORS.protein },
-      { label: "Carbs", value: cKcal, color: CHART_COLORS.carbs },
-      { label: "Fat", value: fKcal, color: CHART_COLORS.fat },
+      { label: "Protein", value: pKcal, color: C.protein },
+      { label: "Carbs", value: cKcal, color: C.carbs },
+      { label: "Fat", value: fKcal, color: C.fat },
     ],
     { size: 160, thickness: 22, centerValue: fmtNum(d.weekTotal.calories), centerLabel: "kcal total" }
   );
@@ -447,9 +473,9 @@ function renderWeeklySummary() {
       ${macroTotalKcal > 0 ? donut : `<div class="chart-empty">No entries logged this week</div>`}
       ${macroTotalKcal > 0 ? `
         <div class="legend-row">
-          <span class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS.protein}"></span>Protein ${Math.round(pKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.protein)}g</span>
-          <span class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS.carbs}"></span>Carbs ${Math.round(cKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.carbs)}g</span>
-          <span class="legend-item"><span class="legend-dot" style="background:${CHART_COLORS.fat}"></span>Fat ${Math.round(fKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.fat)}g</span>
+          <span class="legend-item"><span class="legend-dot" style="background:${C.protein}"></span>Protein ${Math.round(pKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.protein)}g</span>
+          <span class="legend-item"><span class="legend-dot" style="background:${C.carbs}"></span>Carbs ${Math.round(cKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.carbs)}g</span>
+          <span class="legend-item"><span class="legend-dot" style="background:${C.fat}"></span>Fat ${Math.round(fKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.fat)}g</span>
         </div>
       ` : ""}
     </div>
@@ -465,7 +491,8 @@ function renderMonthlySummary() {
 
   const lineData = d.dailyTotals.map((day) => ({ label: String(parseISO(day.date).getDate()), value: day.calories }));
 
-  const mealColors = { breakfast: CHART_COLORS.breakfast, lunch: CHART_COLORS.lunch, dinner: CHART_COLORS.dinner, snacks: CHART_COLORS.snacks };
+  const C = getChartColors();
+  const mealColors = { breakfast: C.breakfast, lunch: C.lunch, dinner: C.dinner, snacks: C.snacks };
   const mealTotal = MEAL_ORDER.reduce((s, m) => s + d.mealTotals[m], 0);
   const mealDonut = svgDonutChart(
     MEAL_ORDER.map((m) => ({ label: MEAL_LABELS[m], value: d.mealTotals[m], color: mealColors[m] })),
@@ -920,7 +947,14 @@ function renderAddItemManual() {
 // ---------- Menu (backup) sheet ----------
 
 function renderMenuSheet() {
+  const theme = getThemePref();
   return sheetWrap("Menu", `
+    <div class="field-label" style="margin-bottom:6px;">Appearance</div>
+    <div class="segmented" style="margin-bottom:16px;">
+      <button class="segmented-btn ${theme === "system" ? "active" : ""}" data-action="set-theme" data-theme="system">System</button>
+      <button class="segmented-btn ${theme === "light" ? "active" : ""}" data-action="set-theme" data-theme="light">Light</button>
+      <button class="segmented-btn ${theme === "dark" ? "active" : ""}" data-action="set-theme" data-theme="dark">Dark</button>
+    </div>
     <button class="backup-btn" data-action="open-goals" style="margin-bottom:16px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
       Edit Goals
@@ -1305,6 +1339,9 @@ async function handleAction(action, ds, el) {
     // ---- menu / backup ----
     case "open-menu": state.sheet = { type: "menu" }; renderSheetRoot(); break;
     case "open-goals": state.sheet = { type: "goals", goals: getGoals() }; renderSheetRoot(); break;
+    case "set-theme":
+      applyTheme(ds.theme, { rerender: true });
+      break;
     case "export-backup": {
       const { entryCount, favoriteCount } = await exportBackup();
       showToast(`Exported ${entryCount} entries, ${favoriteCount} saved meals`, "success");
