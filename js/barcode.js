@@ -63,12 +63,15 @@ const BarcodeScanner = (() => {
     // need real resolution to decode reliably. width/height are `ideal`
     // (soft) constraints so they can't cause a hard start failure the way
     // `exact` would. If rejected (e.g. a desktop webcam with no
-    // rear-facing lens, like an iMac), fall back to whatever camera is
-    // available with no constraints at all.
+    // rear-facing lens, like an iMac), fall back to the front camera —
+    // html5-qrcode requires a camera-selector key (facingMode or deviceId)
+    // in this object; passing {} throws its own confusing validation error
+    // ("should have exactly 1 key, found 0") that masks whatever the real
+    // problem was.
     const attempts = [
       { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
       { facingMode: "environment" },
-      {},
+      { facingMode: "user" },
     ];
 
     let lastErr = null;

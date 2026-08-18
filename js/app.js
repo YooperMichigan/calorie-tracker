@@ -7,6 +7,7 @@ const state = {
   logDate: todayISO(),
   entries: [],                 // entries for state.logDate
   favorites: [],                // all favorites, cached
+  water: [],                    // water entries for state.logDate
 
   mealsSearch: "",
 
@@ -23,8 +24,27 @@ async function init() {
   ensureHiddenInputs();
   state.entries = await dbGetEntriesForDate(state.logDate);
   state.favorites = await dbGetAllFavorites();
+  state.water = await dbGetWaterForDate(state.logDate);
   renderAll();
   attachGlobalListeners();
+}
+
+// ---------- goals (stored in localStorage — a handful of numbers, not
+// worth the ceremony of an IndexedDB store) ----------
+
+const GOALS_KEY = "calorieTrackerGoals";
+
+function getGoals() {
+  try {
+    const raw = localStorage.getItem(GOALS_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function setGoals(goals) {
+  localStorage.setItem(GOALS_KEY, JSON.stringify(goals));
 }
 
 function ensureHiddenInputs() {
@@ -66,6 +86,14 @@ async function refreshEntries() {
 
 async function refreshFavorites() {
   state.favorites = await dbGetAllFavorites();
+}
+
+async function refreshWater() {
+  state.water = await dbGetWaterForDate(state.logDate);
+}
+
+function sumWater(water) {
+  return water.reduce((s, w) => s + (w.amount || 0), 0);
 }
 
 async function refreshWeeklyData() {
@@ -162,9 +190,54 @@ function renderSheetRoot() {
 // Log view
 // ============================================================================
 
+function renderProgressBar(current, goal, colorClass) {
+  if (!goal || goal <= 0) return "";
+  const pct = clamp((current / goal) * 100, 0, 100);
+  return `<div class="progress-track"><div class="progress-fill ${colorClass}" style="width:${pct}%"></div></div>`;
+}
+
+function renderWaterCard() {
+  const goals = getGoals();
+  const total = sumWater(state.water);
+  const sortedWater = state.water.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const rows = sortedWater.length ? sortedWater.map((w) => `
+    <div class="water-row">
+      <span class="water-row-amount">${fmtNum(w.amount)} oz</span>
+      <button class="water-row-del" data-action="delete-water" data-id="${w.id}" aria-label="Delete">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  `).join("") : "";
+
+  return `
+    <div class="water-card">
+      <div class="water-header">
+        <span class="water-title">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5s6.5 7.2 6.5 12a6.5 6.5 0 0 1-13 0c0-4.8 6.5-12 6.5-12Z"/></svg>
+          Water
+        </span>
+        <span class="water-total">${fmtNum(total)}${goals.water ? ` / ${fmtNum(goals.water)}` : ""} oz</span>
+      </div>
+      ${renderProgressBar(total, goals.water, "water")}
+      <div class="water-quick-row" style="margin-top:10px;">
+        <button class="water-qty-btn" data-action="water-quick-add" data-amount="8">+8 oz</button>
+        <button class="water-qty-btn" data-action="water-quick-add" data-amount="16">+16 oz</button>
+        <button class="water-qty-btn" data-action="water-quick-add" data-amount="20">+20 oz</button>
+        <button class="water-qty-btn" data-action="water-quick-add" data-amount="32">+32 oz</button>
+      </div>
+      <form id="waterCustomForm" class="water-custom-row">
+        <input type="number" name="amount" placeholder="Custom oz" min="1" step="1">
+        <button type="submit" class="btn btn-secondary btn-sm">Add</button>
+      </form>
+      ${rows ? `<div class="water-list">${rows}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderLogView() {
   const rel = formatDateRelative(state.logDate);
   const totals = sumTotals(state.entries);
+  const goals = getGoals();
 
   const mealSections = MEAL_ORDER.map((meal) => {
     const mealEntries = state.entries.filter((e) => e.meal === meal);
@@ -206,21 +279,27 @@ function renderLogView() {
     <div class="totals-row">
       <div class="total-card">
         <span class="total-label">Calories</span>
-        <span class="total-value accent">${fmtNum(totals.calories)}</span>
+        <span class="total-value accent">${fmtNum(totals.calories)}${goals.calories ? `<span class="total-unit"> /${fmtNum(goals.calories)}</span>` : ""}</span>
+        ${renderProgressBar(totals.calories, goals.calories, "")}
       </div>
       <div class="total-card protein">
         <span class="total-label">Protein</span>
-        <span class="total-value">${fmtNum(totals.protein)}<span class="total-unit">g</span></span>
+        <span class="total-value">${fmtNum(totals.protein)}<span class="total-unit">g${goals.protein ? `/${fmtNum(goals.protein)}g` : ""}</span></span>
+        ${renderProgressBar(totals.protein, goals.protein, "protein")}
       </div>
       <div class="total-card carbs">
         <span class="total-label">Carbs</span>
-        <span class="total-value">${fmtNum(totals.carbs)}<span class="total-unit">g</span></span>
+        <span class="total-value">${fmtNum(totals.carbs)}<span class="total-unit">g${goals.carbs ? `/${fmtNum(goals.carbs)}g` : ""}</span></span>
+        ${renderProgressBar(totals.carbs, goals.carbs, "carbs")}
       </div>
       <div class="total-card fat">
         <span class="total-label">Fat</span>
-        <span class="total-value">${fmtNum(totals.fat)}<span class="total-unit">g</span></span>
+        <span class="total-value">${fmtNum(totals.fat)}<span class="total-unit">g${goals.fat ? `/${fmtNum(goals.fat)}g` : ""}</span></span>
+        ${renderProgressBar(totals.fat, goals.fat, "fat")}
       </div>
     </div>
+
+    ${renderWaterCard()}
 
     ${mealSections}
   `;
@@ -309,6 +388,7 @@ function renderSummaryView() {
 function renderWeeklySummary() {
   if (!state.weeklyData) return `<div class="chart-empty">Loading…</div>`;
   const d = state.weeklyData;
+  const goals = getGoals();
   const isCurrentWeek = weekRangeFor(todayISO()).start === d.range.start;
 
   const barData = d.dailyTotals.map((day) => ({
@@ -353,6 +433,7 @@ function renderWeeklySummary() {
           <span class="c">C ${fmtNum(d.avg.carbs)}g</span>
           <span class="f">F ${fmtNum(d.avg.fat)}g</span>
         </div>
+        ${goals.calories ? `<div class="summary-card-sub">goal: ${fmtNum(goals.calories)} kcal/day</div>` : ""}
       </div>
     </div>
 
@@ -378,6 +459,7 @@ function renderWeeklySummary() {
 function renderMonthlySummary() {
   if (!state.monthlyData) return `<div class="chart-empty">Loading…</div>`;
   const d = state.monthlyData;
+  const goals = getGoals();
   const thisMonth = monthRangeFor(todayISO());
   const isCurrentMonth = thisMonth.year === d.range.year && thisMonth.month === d.range.month;
 
@@ -416,6 +498,7 @@ function renderMonthlySummary() {
           <span class="c">C ${fmtNum(d.avg.carbs)}g</span>
           <span class="f">F ${fmtNum(d.avg.fat)}g</span>
         </div>
+        ${goals.calories ? `<div class="summary-card-sub">goal: ${fmtNum(goals.calories)} kcal/day</div>` : ""}
       </div>
     </div>
 
@@ -447,6 +530,7 @@ function renderSheet() {
   if (s.type === "meal-slot-picker") return renderMealSlotPickerSheet(s);
   if (s.type === "new-favorite") return renderFavoriteBuilderSheet(s);
   if (s.type === "menu") return renderMenuSheet(s);
+  if (s.type === "goals") return renderGoalsSheet(s);
   return "";
 }
 
@@ -692,8 +776,85 @@ function renderFavoriteBuilderSheet(s) {
     </div>
   `).join("") : `<div class="empty-meal" style="margin-bottom:10px;">No items added yet.</div>`;
 
-  const addItemForm = s.addingItem ? `
-    <form id="favItemForm" style="margin-top:10px; padding-top:12px; border-top:1px solid var(--border);">
+  return sheetWrap(s.editingFavId ? "Edit Saved Meal" : "New Saved Meal", `
+    <div class="field-wrap">
+      <span class="field-label">Meal name</span>
+      <input type="text" id="favNameInput" placeholder="e.g. Post-workout shake" value="${escapeHtml(s.name)}">
+    </div>
+    ${itemRows}
+    ${renderAddItemSection(s)}
+    <div style="display:flex; gap:8px; margin-top:16px;">
+      ${s.editingFavId ? `<button class="btn btn-danger" data-action="delete-favorite" data-id="${s.editingFavId}">Delete</button>` : ""}
+      <button class="btn btn-primary" style="flex:1;" data-action="save-favorite">Save Meal</button>
+    </div>
+  `);
+}
+
+function renderAddItemSection(s) {
+  if (!s.addingItem) {
+    return `<button class="btn btn-secondary btn-block" data-action="show-add-item-form" style="margin-top:4px;">+ Add Item</button>`;
+  }
+  const ai = s.addingItem;
+  const tabs = `
+    <div class="segmented" style="margin-top:12px;">
+      <button class="segmented-btn ${ai.tab === "scan" ? "active" : ""}" data-action="additem-tab" data-tab="scan">Scan</button>
+      <button class="segmented-btn ${ai.tab === "manual" ? "active" : ""}" data-action="additem-tab" data-tab="manual">Manual</button>
+    </div>
+  `;
+  const body = ai.tab === "scan" ? renderAddItemScan(ai) : renderAddItemManual();
+  return `<div style="padding-top:4px; border-top:1px solid var(--border); margin-top:10px;">${tabs}${body}</div>`;
+}
+
+function renderAddItemScan(ai) {
+  if (ai.scanError) {
+    return `
+      <div class="scan-status">${escapeHtml(ai.scanError)}</div>
+      <button class="btn btn-secondary btn-block" data-action="additem-rescan">Try Again</button>
+      <button class="link-btn" data-action="additem-tab" data-tab="manual" style="display:block; text-align:center; margin-top:10px;">Enter manually instead</button>
+    `;
+  }
+  if (ai.lookupLoading) return `<div class="scan-status">Looking up product…</div>`;
+  if (ai.product) {
+    if (!ai.product.found) {
+      return `
+        <div class="scan-status">No match found for barcode ${escapeHtml(ai.product.barcode)}.</div>
+        <button class="btn btn-primary btn-block" data-action="additem-manual-from-scan">Enter Manually</button>
+        <button class="link-btn" data-action="additem-rescan" style="display:block; text-align:center; margin-top:10px;">Scan again</button>
+      `;
+    }
+    const p = ai.product, qty = ai.qty;
+    const total = { calories: p.perUnit.calories * qty, protein: p.perUnit.protein * qty, carbs: p.perUnit.carbs * qty, fat: p.perUnit.fat * qty };
+    return `
+      <div class="product-card">
+        <div class="product-name">${escapeHtml(p.name)}</div>
+        ${p.brand ? `<div class="product-brand">${escapeHtml(p.brand)}</div>` : ""}
+        <div class="field-label">Quantity (× ${escapeHtml(p.baseLabel)})</div>
+        <div class="stepper" style="margin:6px 0 4px;">
+          <button class="stepper-btn" data-action="additem-scan-qty" data-delta="-0.25">−</button>
+          <span class="stepper-value">${fmtNum(qty, 2)}</span>
+          <button class="stepper-btn" data-action="additem-scan-qty" data-delta="0.25">+</button>
+        </div>
+        <div class="macro-chip-row">
+          <span class="macro-chip kcal">${fmtNum(total.calories)} kcal</span>
+          <span class="macro-chip p">P ${fmtNum(total.protein)}g</span>
+          <span class="macro-chip c">C ${fmtNum(total.carbs)}g</span>
+          <span class="macro-chip f">F ${fmtNum(total.fat)}g</span>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-block" data-action="confirm-additem-scan">Add Item</button>
+      <button class="link-btn" data-action="additem-rescan" style="display:block; text-align:center; margin-top:10px;">Scan a different item</button>
+    `;
+  }
+  return `
+    <div class="scan-wrap"><div id="qr-reader"></div></div>
+    <div class="scan-hint">Hold the barcode flat, well-lit, and steady, filling most of the frame.</div>
+    <div class="scan-hint" id="scanDiag">Starting camera…</div>
+  `;
+}
+
+function renderAddItemManual() {
+  return `
+    <form id="favItemForm" style="margin-top:10px;">
       <div class="field-wrap">
         <span class="field-label">Food name</span>
         <input type="text" name="name" placeholder="e.g. Brown rice" required>
@@ -730,26 +891,17 @@ function renderFavoriteBuilderSheet(s) {
       </div>
       <button type="submit" class="btn btn-secondary btn-block">Add Item</button>
     </form>
-  ` : `<button class="btn btn-secondary btn-block" data-action="show-add-item-form" style="margin-top:4px;">+ Add Item</button>`;
-
-  return sheetWrap(s.editingFavId ? "Edit Saved Meal" : "New Saved Meal", `
-    <div class="field-wrap">
-      <span class="field-label">Meal name</span>
-      <input type="text" id="favNameInput" placeholder="e.g. Post-workout shake" value="${escapeHtml(s.name)}">
-    </div>
-    ${itemRows}
-    ${addItemForm}
-    <div style="display:flex; gap:8px; margin-top:16px;">
-      ${s.editingFavId ? `<button class="btn btn-danger" data-action="delete-favorite" data-id="${s.editingFavId}">Delete</button>` : ""}
-      <button class="btn btn-primary" style="flex:1;" data-action="save-favorite">Save Meal</button>
-    </div>
-  `);
+  `;
 }
 
 // ---------- Menu (backup) sheet ----------
 
 function renderMenuSheet() {
-  return sheetWrap("Backup & Restore", `
+  return sheetWrap("Menu", `
+    <button class="backup-btn" data-action="open-goals" style="margin-bottom:16px;">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></svg>
+      Edit Goals
+    </button>
     <p class="scan-hint" style="text-align:left; margin-bottom:16px;">All data lives only on this device. Export a backup regularly, or before switching phones.</p>
     <button class="backup-btn" data-action="export-backup" style="margin-bottom:10px;">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
@@ -762,13 +914,59 @@ function renderMenuSheet() {
   `);
 }
 
+function renderGoalsSheet(s) {
+  const g = s.goals;
+  return sheetWrap("Daily Goals", `
+    <p class="scan-hint" style="text-align:left; margin-bottom:14px;">Leave any field blank to hide its progress bar.</p>
+    <form id="goalsForm">
+      <div class="form-grid">
+        <div class="field-wrap">
+          <span class="field-label">Calories</span>
+          <input type="number" name="calories" min="0" step="1" placeholder="e.g. 2000" value="${g.calories ?? ""}">
+        </div>
+        <div class="field-wrap">
+          <span class="field-label">Water (oz)</span>
+          <input type="number" name="water" min="0" step="1" placeholder="e.g. 80" value="${g.water ?? ""}">
+        </div>
+      </div>
+      <div class="form-grid-3">
+        <div class="field-wrap">
+          <span class="field-label">Protein (g)</span>
+          <input type="number" name="protein" min="0" step="1" placeholder="150" value="${g.protein ?? ""}">
+        </div>
+        <div class="field-wrap">
+          <span class="field-label">Carbs (g)</span>
+          <input type="number" name="carbs" min="0" step="1" placeholder="200" value="${g.carbs ?? ""}">
+        </div>
+        <div class="field-wrap">
+          <span class="field-label">Fat (g)</span>
+          <input type="number" name="fat" min="0" step="1" placeholder="65" value="${g.fat ?? ""}">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Save Goals</button>
+    </form>
+  `);
+}
+
 // ============================================================================
 // Post-render hooks (scanner start, autofocus)
 // ============================================================================
 
-function afterSheetRender() {
+// Both the main "Add to meal" sheet and the favorite-item builder can be
+// mid-scan at once (never simultaneously, but the same scanner callbacks
+// serve either) — this resolves which nested state object the active scan
+// should write its result into.
+function activeScanTarget() {
   const s = state.sheet;
-  if (s && s.type === "add" && s.tab === "scan" && !s.product && !s.lookupLoading && !s.scanError) {
+  if (!s) return null;
+  if (s.type === "add" && s.tab === "scan") return s;
+  if (s.type === "new-favorite" && s.addingItem && s.addingItem.tab === "scan") return s.addingItem;
+  return null;
+}
+
+function afterSheetRender() {
+  const target = activeScanTarget();
+  if (target && !target.product && !target.lookupLoading && !target.scanError) {
     startScanner();
   }
   const nameInput = document.getElementById("favNameInput");
@@ -789,26 +987,30 @@ function updateScanDiag(info) {
 
 async function onBarcodeDetected(code) {
   await BarcodeScanner.stop();
-  if (!state.sheet || state.sheet.type !== "add") return;
-  state.sheet.lookupLoading = true;
+  let target = activeScanTarget();
+  if (!target) return;
+  target.lookupLoading = true;
   renderSheetRoot();
   try {
     const product = await lookupBarcode(code);
-    if (!state.sheet) return;
-    state.sheet.lookupLoading = false;
-    state.sheet.product = product;
-    state.sheet.qty = 1;
+    target = activeScanTarget();
+    if (!target) return;
+    target.lookupLoading = false;
+    target.product = product;
+    target.qty = 1;
   } catch (err) {
-    if (!state.sheet) return;
-    state.sheet.lookupLoading = false;
-    state.sheet.scanError = err.message || "Lookup failed.";
+    target = activeScanTarget();
+    if (!target) return;
+    target.lookupLoading = false;
+    target.scanError = err.message || "Lookup failed.";
   }
   renderSheetRoot();
 }
 
 function onScanFailure(msg) {
-  if (!state.sheet || state.sheet.type !== "add") return;
-  state.sheet.scanError = msg;
+  const target = activeScanTarget();
+  if (!target) return;
+  target.scanError = msg;
   renderSheetRoot();
 }
 
@@ -837,9 +1039,9 @@ async function handleAction(action, ds, el) {
     }
 
     // ---- day nav ----
-    case "day-prev": state.logDate = addDays(state.logDate, -1); await refreshEntries(); renderMain(); break;
-    case "day-next": state.logDate = addDays(state.logDate, 1); await refreshEntries(); renderMain(); break;
-    case "day-today": state.logDate = todayISO(); await refreshEntries(); renderMain(); break;
+    case "day-prev": state.logDate = addDays(state.logDate, -1); await Promise.all([refreshEntries(), refreshWater()]); renderMain(); break;
+    case "day-next": state.logDate = addDays(state.logDate, 1); await Promise.all([refreshEntries(), refreshWater()]); renderMain(); break;
+    case "day-today": state.logDate = todayISO(); await Promise.all([refreshEntries(), refreshWater()]); renderMain(); break;
     case "day-pick": {
       const input = document.getElementById("hiddenDatePicker");
       input.value = state.logDate;
@@ -928,15 +1130,30 @@ async function handleAction(action, ds, el) {
       break;
     }
 
+    // ---- water ----
+    case "water-quick-add": {
+      const amount = parseFloat(ds.amount);
+      await dbAddWater({ id: uuid(), date: state.logDate, amount, createdAt: Date.now() });
+      await refreshWater();
+      renderMain();
+      break;
+    }
+    case "delete-water": {
+      await dbDeleteWater(ds.id);
+      await refreshWater();
+      renderMain();
+      break;
+    }
+
     // ---- my meals ----
     case "new-favorite":
-      state.sheet = { type: "new-favorite", name: "", items: [], addingItem: false, editingFavId: null };
+      state.sheet = { type: "new-favorite", name: "", items: [], addingItem: null, editingFavId: null };
       renderSheetRoot();
       break;
     case "edit-favorite": {
       const fav = state.favorites.find((f) => f.id === ds.id);
       if (fav) {
-        state.sheet = { type: "new-favorite", name: fav.name, items: JSON.parse(JSON.stringify(fav.items)), addingItem: false, editingFavId: fav.id };
+        state.sheet = { type: "new-favorite", name: fav.name, items: JSON.parse(JSON.stringify(fav.items)), addingItem: null, editingFavId: fav.id };
         renderSheetRoot();
       }
       break;
@@ -952,9 +1169,47 @@ async function handleAction(action, ds, el) {
       break;
     }
     case "show-add-item-form":
-      state.sheet.addingItem = true;
+      state.sheet.addingItem = { tab: "scan", product: null, lookupLoading: false, scanError: null, qty: 1 };
       renderSheetRoot();
       break;
+    case "additem-tab":
+      await BarcodeScanner.stop();
+      state.sheet.addingItem.tab = ds.tab;
+      if (ds.tab === "scan") { state.sheet.addingItem.product = null; state.sheet.addingItem.scanError = null; }
+      renderSheetRoot();
+      break;
+    case "additem-rescan":
+      state.sheet.addingItem.product = null;
+      state.sheet.addingItem.scanError = null;
+      state.sheet.addingItem.lookupLoading = false;
+      renderSheetRoot();
+      break;
+    case "additem-manual-from-scan":
+      state.sheet.addingItem.tab = "manual";
+      renderSheetRoot();
+      break;
+    case "additem-scan-qty": {
+      const delta = parseFloat(ds.delta);
+      const ai = state.sheet.addingItem;
+      ai.qty = Math.max(0.25, Math.round((ai.qty + delta) * 100) / 100);
+      renderSheetRoot();
+      break;
+    }
+    case "confirm-additem-scan": {
+      const ai = state.sheet.addingItem;
+      const p = ai.product;
+      state.sheet.items.push({
+        name: p.name, quantity: ai.qty, unit: p.baseLabel,
+        calories: round1(p.perUnit.calories * ai.qty),
+        protein: round1(p.perUnit.protein * ai.qty),
+        carbs: round1(p.perUnit.carbs * ai.qty),
+        fat: round1(p.perUnit.fat * ai.qty),
+        perUnit: p.perUnit,
+      });
+      state.sheet.addingItem = null;
+      renderSheetRoot();
+      break;
+    }
     case "remove-fav-item":
       state.sheet.items.splice(parseInt(ds.index, 10), 1);
       renderSheetRoot();
@@ -1010,6 +1265,7 @@ async function handleAction(action, ds, el) {
 
     // ---- menu / backup ----
     case "open-menu": state.sheet = { type: "menu" }; renderSheetRoot(); break;
+    case "open-goals": state.sheet = { type: "goals", goals: getGoals() }; renderSheetRoot(); break;
     case "export-backup": {
       const { entryCount, favoriteCount } = await exportBackup();
       showToast(`Exported ${entryCount} entries, ${favoriteCount} saved meals`, "success");
@@ -1067,6 +1323,34 @@ function attachGlobalListeners() {
   });
 
   document.addEventListener("submit", async (e) => {
+    if (e.target.id === "goalsForm") {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const num = (v) => (v === "" || v === null ? null : parseFloat(v));
+      setGoals({
+        calories: num(fd.get("calories")),
+        protein: num(fd.get("protein")),
+        carbs: num(fd.get("carbs")),
+        fat: num(fd.get("fat")),
+        water: num(fd.get("water")),
+      });
+      await closeSheet();
+      renderMain();
+      showToast("Goals saved", "success");
+      return;
+    }
+
+    if (e.target.id === "waterCustomForm") {
+      e.preventDefault();
+      const amount = parseFloat(new FormData(e.target).get("amount"));
+      if (amount > 0) {
+        await dbAddWater({ id: uuid(), date: state.logDate, amount, createdAt: Date.now() });
+        await refreshWater();
+        renderMain();
+      }
+      return;
+    }
+
     if (e.target.id === "manualEntryForm") {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -1131,7 +1415,7 @@ function attachGlobalListeners() {
         fat: parseFloat(fd.get("fat")) || 0,
         perUnit: null,
       });
-      state.sheet.addingItem = false;
+      state.sheet.addingItem = null;
       renderSheetRoot();
       return;
     }
@@ -1170,7 +1454,7 @@ function attachGlobalListeners() {
   document.addEventListener("change", async (e) => {
     if (e.target.id === "hiddenDatePicker") {
       state.logDate = e.target.value || state.logDate;
-      await refreshEntries();
+      await Promise.all([refreshEntries(), refreshWater()]);
       renderMain();
     }
     if (e.target.id === "importFileInput") {

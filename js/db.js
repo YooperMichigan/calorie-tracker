@@ -10,9 +10,10 @@
 // and its API is async so large reads never block the UI thread.
 
 const DB_NAME = "calorieTrackerDB";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_ENTRIES = "entries";
 const STORE_FAVORITES = "favorites";
+const STORE_WATER = "water";
 
 let _dbPromise = null;
 
@@ -28,6 +29,10 @@ function dbOpen() {
       }
       if (!db.objectStoreNames.contains(STORE_FAVORITES)) {
         db.createObjectStore(STORE_FAVORITES, { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains(STORE_WATER)) {
+        const water = db.createObjectStore(STORE_WATER, { keyPath: "id" });
+        water.createIndex("date", "date", { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -108,26 +113,59 @@ async function dbGetAllFavorites() {
   return all.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
+// ---------- water ----------
+
+async function dbAddWater(entry) {
+  const store = await txStore(STORE_WATER, "readwrite");
+  await reqToPromise(store.add(entry));
+  return entry;
+}
+
+async function dbDeleteWater(id) {
+  const store = await txStore(STORE_WATER, "readwrite");
+  await reqToPromise(store.delete(id));
+}
+
+async function dbGetWaterForDate(dateISO) {
+  const store = await txStore(STORE_WATER, "readonly");
+  const idx = store.index("date");
+  return reqToPromise(idx.getAll(IDBKeyRange.only(dateISO)));
+}
+
+async function dbGetWaterForDateRange(startISO, endISO) {
+  const store = await txStore(STORE_WATER, "readonly");
+  const idx = store.index("date");
+  return reqToPromise(idx.getAll(IDBKeyRange.bound(startISO, endISO)));
+}
+
+async function dbGetAllWater() {
+  const store = await txStore(STORE_WATER, "readonly");
+  return reqToPromise(store.getAll());
+}
+
 // ---------- bulk (backup/restore) ----------
 
 async function dbClearAll() {
   const db = await dbOpen();
-  const tx = db.transaction([STORE_ENTRIES, STORE_FAVORITES], "readwrite");
+  const tx = db.transaction([STORE_ENTRIES, STORE_FAVORITES, STORE_WATER], "readwrite");
   tx.objectStore(STORE_ENTRIES).clear();
   tx.objectStore(STORE_FAVORITES).clear();
+  tx.objectStore(STORE_WATER).clear();
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-async function dbBulkPut(entries, favorites) {
+async function dbBulkPut(entries, favorites, water = []) {
   const db = await dbOpen();
-  const tx = db.transaction([STORE_ENTRIES, STORE_FAVORITES], "readwrite");
+  const tx = db.transaction([STORE_ENTRIES, STORE_FAVORITES, STORE_WATER], "readwrite");
   const eStore = tx.objectStore(STORE_ENTRIES);
   const fStore = tx.objectStore(STORE_FAVORITES);
+  const wStore = tx.objectStore(STORE_WATER);
   entries.forEach((e) => eStore.put(e));
   favorites.forEach((f) => fStore.put(f));
+  water.forEach((w) => wStore.put(w));
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
