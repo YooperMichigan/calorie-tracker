@@ -539,7 +539,7 @@ function renderWeeklySummary() {
       <div class="summary-card">
         <div class="summary-card-label">Daily Average</div>
         <div class="summary-card-value">${fmtNum(d.avg.water)}<span class="total-unit"> oz</span></div>
-        <div class="summary-card-sub">Water</div>
+        <div class="summary-card-sub">${goals.water ? `Water Goal ${fmtNum(goals.water)}oz` : "No water goal set"}</div>
       </div>
     </div>
 
@@ -613,7 +613,7 @@ function renderMonthlySummary() {
       <div class="summary-card">
         <div class="summary-card-label">Weekly Average</div>
         <div class="summary-card-value">${fmtNum(d.weeklyAvg.water)}<span class="total-unit"> oz</span></div>
-        <div class="summary-card-sub">Water</div>
+        <div class="summary-card-sub">${goals.water ? `Water Goal ${fmtNum(goals.water * 7)}oz` : "No water goal set"}</div>
       </div>
     </div>
 
