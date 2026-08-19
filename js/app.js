@@ -127,43 +127,69 @@ function sumWater(water) {
 
 async function refreshWeeklyData() {
   const range = weekRangeFor(state.weekAnchor);
-  const all = await dbGetEntriesForDateRange(range.start, range.end);
+  const [all, water] = await Promise.all([
+    dbGetEntriesForDateRange(range.start, range.end),
+    dbGetWaterForDateRange(range.start, range.end),
+  ]);
   const byDate = new Map(range.days.map((d) => [d, []]));
   all.forEach((e) => { if (byDate.has(e.date)) byDate.get(e.date).push(e); });
+  const waterByDate = new Map(range.days.map((d) => [d, 0]));
+  water.forEach((w) => { if (waterByDate.has(w.date)) waterByDate.set(w.date, waterByDate.get(w.date) + (w.amount || 0)); });
 
-  const dailyTotals = range.days.map((d) => ({ date: d, ...sumTotals(byDate.get(d)) }));
+  const dailyTotals = range.days.map((d) => ({ date: d, ...sumTotals(byDate.get(d)), water: waterByDate.get(d) }));
   const daysWithData = dailyTotals.filter((d) => d.calories > 0).length;
   const weekTotal = sumTotals(all);
+  const weekWater = sumWater(water);
   const divisor = Math.max(1, daysWithData);
 
-  state.weeklyData = { range, dailyTotals, weekTotal, daysWithData, avg: {
+  state.weeklyData = { range, dailyTotals, weekTotal, weekWater, daysWithData, avg: {
     calories: weekTotal.calories / divisor,
     protein: weekTotal.protein / divisor,
     carbs: weekTotal.carbs / divisor,
     fat: weekTotal.fat / divisor,
+    fiber: weekTotal.fiber / divisor,
+    water: weekWater / divisor,
   } };
 }
 
 async function refreshMonthlyData() {
   const range = monthRangeFor(state.monthAnchor);
-  const all = await dbGetEntriesForDateRange(range.days[0], range.days[range.days.length - 1]);
+  const startISO = range.days[0], endISO = range.days[range.days.length - 1];
+  const [all, water] = await Promise.all([
+    dbGetEntriesForDateRange(startISO, endISO),
+    dbGetWaterForDateRange(startISO, endISO),
+  ]);
   const byDate = new Map(range.days.map((d) => [d, []]));
   all.forEach((e) => { if (byDate.has(e.date)) byDate.get(e.date).push(e); });
+  const waterByDate = new Map(range.days.map((d) => [d, 0]));
+  water.forEach((w) => { if (waterByDate.has(w.date)) waterByDate.set(w.date, waterByDate.get(w.date) + (w.amount || 0)); });
 
-  const dailyTotals = range.days.map((d) => ({ date: d, ...sumTotals(byDate.get(d)) }));
+  const dailyTotals = range.days.map((d) => ({ date: d, ...sumTotals(byDate.get(d)), water: waterByDate.get(d) }));
   const daysWithData = dailyTotals.filter((d) => d.calories > 0).length;
   const monthTotal = sumTotals(all);
+  const monthWater = sumWater(water);
   const divisor = Math.max(1, daysWithData);
 
   const mealTotals = { breakfast: 0, lunch: 0, dinner: 0, snacks: 0 };
   all.forEach((e) => { if (mealTotals[e.meal] !== undefined) mealTotals[e.meal] += e.calories || 0; });
 
-  state.monthlyData = { range, dailyTotals, monthTotal, daysWithData, mealTotals, avg: {
+  const avg = {
     calories: monthTotal.calories / divisor,
     protein: monthTotal.protein / divisor,
     carbs: monthTotal.carbs / divisor,
     fat: monthTotal.fat / divisor,
-  } };
+    fiber: monthTotal.fiber / divisor,
+    water: monthWater / divisor,
+  };
+  // Monthly summary shows weekly (not daily) averages — derived directly
+  // from the daily average rather than re-aggregated by calendar week,
+  // since "week" boundaries within a month are fuzzy at the edges.
+  const weeklyAvg = {
+    calories: avg.calories * 7, protein: avg.protein * 7, carbs: avg.carbs * 7,
+    fat: avg.fat * 7, fiber: avg.fiber * 7, water: avg.water * 7,
+  };
+
+  state.monthlyData = { range, dailyTotals, monthTotal, monthWater, daysWithData, mealTotals, avg, weeklyAvg };
 }
 
 // ============================================================================
@@ -223,6 +249,29 @@ function renderProgressBar(current, goal, colorClass) {
   if (!goal || goal <= 0) return "";
   const pct = clamp((current / goal) * 100, 0, 100);
   return `<div class="progress-track"><div class="progress-fill ${colorClass}" style="width:${pct}%"></div></div>`;
+}
+
+// Shared "Calorie Goal" summary card for weekly/monthly views: the goal is
+// always set as a *daily* target, scaled here to the period (×7 or ×days in
+// month) and compared against what was actually logged.
+function renderCalorieGoalCard(totalCalories, dailyGoal, numDays) {
+  if (!dailyGoal) {
+    return `
+      <div class="summary-card">
+        <div class="summary-card-label">Calorie Goal</div>
+        <div class="summary-card-value">—</div>
+        <div class="summary-card-sub">No goal set</div>
+      </div>
+    `;
+  }
+  const periodGoal = dailyGoal * numDays;
+  const diff = round1(periodGoal - totalCalories);
+  return `
+    <div class="summary-card">
+      <div class="summary-card-label">Calorie Goal</div>
+      <div class="summary-card-value">${diff > 0 ? "+" : ""}${fmtNum(diff)}<span class="total-unit"> kcal</span></div>
+    </div>
+  `;
 }
 
 function renderWaterCard() {
@@ -433,18 +482,23 @@ function renderWeeklySummary() {
   const C = getChartColors();
   const isCurrentWeek = weekRangeFor(todayISO()).start === d.range.start;
 
-  const barData = d.dailyTotals.map((day) => ({
-    label: WEEKDAY_SHORT[parseISO(day.date).getDay()],
-    value: day.calories,
-  }));
+  const calorieData = d.dailyTotals.map((day) => ({ label: WEEKDAY_SHORT[parseISO(day.date).getDay()], value: day.calories }));
+  const waterData = d.dailyTotals.map((day) => ({ label: WEEKDAY_SHORT[parseISO(day.date).getDay()], value: day.water }));
 
-  const pKcal = d.weekTotal.protein * 4, cKcal = d.weekTotal.carbs * 4, fKcal = d.weekTotal.fat * 9;
-  const macroTotalKcal = pKcal + cKcal + fKcal;
+  // Fiber is nutritionally a subset of total carbs (it's the "Dietary
+  // Fiber" sub-line under "Total Carbohydrate" on a label) — showing it as
+  // a 4th slice alongside the full carbs slice would double-count those
+  // calories. Netting it out of carbs keeps the four slices summing to
+  // the true total.
+  const pKcal = d.weekTotal.protein * 4, fiKcal = d.weekTotal.fiber * 4;
+  const cKcal = Math.max(0, d.weekTotal.carbs - d.weekTotal.fiber) * 4, fKcal = d.weekTotal.fat * 9;
+  const macroTotalKcal = pKcal + cKcal + fKcal + fiKcal;
   const donut = svgDonutChart(
     [
       { label: "Protein", value: pKcal, color: C.protein },
       { label: "Carbs", value: cKcal, color: C.carbs },
       { label: "Fat", value: fKcal, color: C.fat },
+      { label: "Fiber", value: fiKcal, color: C.fiber },
     ],
     { size: 160, thickness: 22, centerValue: fmtNum(d.weekTotal.calories), centerLabel: "kcal total" }
   );
@@ -465,8 +519,9 @@ function renderWeeklySummary() {
       <div class="summary-card">
         <div class="summary-card-label">Total Calories</div>
         <div class="summary-card-value">${fmtNum(d.weekTotal.calories)}</div>
-        <div class="summary-card-sub">across ${d.daysWithData} logged day${d.daysWithData === 1 ? "" : "s"}</div>
+        <div class="summary-card-sub">${d.daysWithData} logged day${d.daysWithData === 1 ? "" : "s"}</div>
       </div>
+      ${renderCalorieGoalCard(d.weekTotal.calories, goals.calories, 7)}
       <div class="summary-card">
         <div class="summary-card-label">Daily Average</div>
         <div class="summary-card-value">${fmtNum(d.avg.calories)}<span class="total-unit"> kcal</span></div>
@@ -474,24 +529,30 @@ function renderWeeklySummary() {
           <span class="p">P ${fmtNum(d.avg.protein)}g</span>
           <span class="c">C ${fmtNum(d.avg.carbs)}g</span>
           <span class="f">F ${fmtNum(d.avg.fat)}g</span>
+          <span class="fi">Fi ${fmtNum(d.avg.fiber)}g</span>
         </div>
-        ${goals.calories ? `<div class="summary-card-sub">goal: ${fmtNum(goals.calories)} kcal/day</div>` : ""}
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-label">Daily Average</div>
+        <div class="summary-card-value">${fmtNum(d.avg.water)}<span class="total-unit"> oz</span></div>
+        <div class="summary-card-sub">Water</div>
       </div>
     </div>
 
     <div class="chart-card">
-      <div class="chart-title">Daily Calories</div>
-      ${d.weekTotal.calories > 0 ? svgBarChart(barData) : `<div class="chart-empty">No entries logged this week</div>`}
+      <div class="chart-title"><span class="accent">Daily Calories</span> - <span class="water">Water</span></div>
+      ${d.weekTotal.calories > 0 || d.weekWater > 0 ? svgDualBarChart(calorieData, waterData) : `<div class="chart-empty">No entries logged this week</div>`}
     </div>
 
     <div class="chart-card" style="display:flex; flex-direction:column; align-items:center;">
       <div class="chart-title" style="align-self:flex-start;">Macro Breakdown</div>
       ${macroTotalKcal > 0 ? donut : `<div class="chart-empty">No entries logged this week</div>`}
       ${macroTotalKcal > 0 ? `
-        <div class="legend-row">
+        <div class="legend-row-grid">
           <span class="legend-item"><span class="legend-dot" style="background:${C.protein}"></span>Protein ${Math.round(pKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.protein)}g</span>
-          <span class="legend-item"><span class="legend-dot" style="background:${C.carbs}"></span>Carbs ${Math.round(cKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.carbs)}g</span>
+          <span class="legend-item"><span class="legend-dot" style="background:${C.carbs}"></span>Carbs ${Math.round(cKcal / macroTotalKcal * 100)}% · ${fmtNum(round1(d.weekTotal.carbs - d.weekTotal.fiber))}g</span>
           <span class="legend-item"><span class="legend-dot" style="background:${C.fat}"></span>Fat ${Math.round(fKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.fat)}g</span>
+          <span class="legend-item"><span class="legend-dot" style="background:${C.fiber}"></span>Fiber ${Math.round(fiKcal / macroTotalKcal * 100)}% · ${fmtNum(d.weekTotal.fiber)}g</span>
         </div>
       ` : ""}
     </div>
@@ -505,7 +566,8 @@ function renderMonthlySummary() {
   const thisMonth = monthRangeFor(todayISO());
   const isCurrentMonth = thisMonth.year === d.range.year && thisMonth.month === d.range.month;
 
-  const lineData = d.dailyTotals.map((day) => ({ label: String(parseISO(day.date).getDate()), value: day.calories }));
+  const calorieData = d.dailyTotals.map((day) => ({ label: String(parseISO(day.date).getDate()), value: day.calories }));
+  const waterData = d.dailyTotals.map((day) => ({ label: String(parseISO(day.date).getDate()), value: day.water }));
 
   const C = getChartColors();
   const mealColors = { breakfast: C.breakfast, lunch: C.lunch, dinner: C.dinner, snacks: C.snacks };
@@ -531,23 +593,29 @@ function renderMonthlySummary() {
       <div class="summary-card">
         <div class="summary-card-label">Total Calories</div>
         <div class="summary-card-value">${fmtNum(d.monthTotal.calories)}</div>
-        <div class="summary-card-sub">across ${d.daysWithData} logged day${d.daysWithData === 1 ? "" : "s"}</div>
+        <div class="summary-card-sub">${d.daysWithData} logged day${d.daysWithData === 1 ? "" : "s"}</div>
+      </div>
+      ${renderCalorieGoalCard(d.monthTotal.calories, goals.calories, d.range.days.length)}
+      <div class="summary-card">
+        <div class="summary-card-label">Weekly Average</div>
+        <div class="summary-card-value">${fmtNum(d.weeklyAvg.calories)}<span class="total-unit"> kcal</span></div>
+        <div class="macro-mini-row">
+          <span class="p">P ${fmtNum(d.weeklyAvg.protein)}g</span>
+          <span class="c">C ${fmtNum(d.weeklyAvg.carbs)}g</span>
+          <span class="f">F ${fmtNum(d.weeklyAvg.fat)}g</span>
+          <span class="fi">Fi ${fmtNum(d.weeklyAvg.fiber)}g</span>
+        </div>
       </div>
       <div class="summary-card">
-        <div class="summary-card-label">Daily Average</div>
-        <div class="summary-card-value">${fmtNum(d.avg.calories)}<span class="total-unit"> kcal</span></div>
-        <div class="macro-mini-row">
-          <span class="p">P ${fmtNum(d.avg.protein)}g</span>
-          <span class="c">C ${fmtNum(d.avg.carbs)}g</span>
-          <span class="f">F ${fmtNum(d.avg.fat)}g</span>
-        </div>
-        ${goals.calories ? `<div class="summary-card-sub">goal: ${fmtNum(goals.calories)} kcal/day</div>` : ""}
+        <div class="summary-card-label">Weekly Average</div>
+        <div class="summary-card-value">${fmtNum(d.weeklyAvg.water)}<span class="total-unit"> oz</span></div>
+        <div class="summary-card-sub">Water</div>
       </div>
     </div>
 
     <div class="chart-card">
-      <div class="chart-title">Daily Calorie Trend</div>
-      ${d.monthTotal.calories > 0 ? svgLineChart(lineData) : `<div class="chart-empty">No entries logged this month</div>`}
+      <div class="chart-title"><span class="accent">Daily Calorie</span> - <span class="water">Water</span> Trend</div>
+      ${d.monthTotal.calories > 0 || d.monthWater > 0 ? svgDualLineChart(calorieData, waterData) : `<div class="chart-empty">No entries logged this month</div>`}
     </div>
 
     <div class="chart-card" style="display:flex; flex-direction:column; align-items:center;">
