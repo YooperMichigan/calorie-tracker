@@ -1,5 +1,5 @@
 // Bump this version string whenever app files change, so clients pick up the update.
-const CACHE_NAME = "calorie-tracker-v18";
+const CACHE_NAME = "calorie-tracker-v19";
 
 const PRECACHE_URLS = [
   "./",
@@ -19,6 +19,7 @@ const PRECACHE_URLS = [
   "./icons/icon-512.png",
   "./icons/icon-512-maskable.png",
   "./icons/favicon-32.png",
+  "./icons/glyph-header.png",
 ];
 
 self.addEventListener("install", (event) => {
