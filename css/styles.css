@@ -182,6 +182,8 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
 .total-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
 .total-value { color: var(--text); font-size: 16.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .total-value.accent { color: var(--accent); }
+.total-value.under-goal { color: var(--protein); }
+.total-value.over-goal { color: var(--red); }
 .total-unit { color: var(--muted); font-size: 10.5px; font-weight: 400; }
 .total-card.protein .total-value { color: var(--protein); }
 .total-card.carbs .total-value { color: var(--carbs); }
@@ -384,13 +386,16 @@ svg text { font-family: -apple-system, sans-serif; }
 .water-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin-bottom: 14px; }
 .water-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
 .water-title { font-size: 14px; font-weight: 600; color: var(--text); display: flex; align-items: center; gap: 6px; }
-.water-header-right { display: flex; align-items: center; gap: 8px; }
 .water-total { font-size: 13px; color: var(--water); font-weight: 600; font-variant-numeric: tabular-nums; }
-.water-undo-btn { background: none; border: none; color: var(--muted-2); cursor: pointer; padding: 2px; display: flex; }
-.water-undo-btn:active { opacity: 0.6; }
 .water-quick-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
 .water-qty-btn { background: var(--water-bg); border: 1px solid var(--water-border); color: var(--water); border-radius: 9px; padding: 9px 0; font-size: 12.5px; font-weight: 600; cursor: pointer; }
 .water-qty-btn:active { opacity: 0.75; }
+.water-edit-btn { display: flex; align-items: center; justify-content: center; gap: 4px; }
+.water-list { display: flex; flex-direction: column; gap: 7px; }
+.water-row { display: flex; align-items: center; justify-content: space-between; background: var(--water-bg); border: 1px solid var(--water-border); border-radius: 9px; padding: 10px 12px; }
+.water-row-amount { font-size: 13.5px; color: var(--text); font-weight: 600; }
+.water-row-del { background: none; border: none; color: var(--muted-2); cursor: pointer; padding: 4px; display: flex; }
+.water-row-del:active { opacity: 0.6; }
 
 /* ---------- goals / progress ---------- */
 .progress-track { background: var(--card-2); border-radius: 999px; height: 5px; overflow: hidden; margin-top: 6px; }

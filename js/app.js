@@ -251,6 +251,15 @@ function renderProgressBar(current, goal, colorClass) {
   return `<div class="progress-track"><div class="progress-fill ${colorClass}" style="width:${pct}%"></div></div>`;
 }
 
+// Shared under/over color class for any calorie total compared against a
+// (possibly period-scaled) goal — used on the Log view's Calories tile and
+// the Weekly/Monthly "Total Calories" cards. Returns "" when no goal is
+// set, since there's nothing to compare against.
+function calorieGoalColorClass(totalCalories, dailyGoal, numDays) {
+  if (!dailyGoal) return "";
+  return totalCalories > dailyGoal * numDays ? "over-goal" : "under-goal";
+}
+
 // Shared "Calorie Goal" summary card for weekly/monthly views: the goal is
 // always set as a *daily* target, scaled here to the period (×7 or ×days in
 // month) and compared against what was actually logged.
@@ -289,24 +298,34 @@ function renderWaterCard() {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5s6.5 7.2 6.5 12a6.5 6.5 0 0 1-13 0c0-4.8 6.5-12 6.5-12Z"/></svg>
           Water
         </span>
-        <span class="water-header-right">
-          ${state.water.length ? `
-            <button class="water-undo-btn" data-action="undo-last-water" aria-label="Undo last">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6M3 13a9 9 0 1 0 3-6.7L3 9"/></svg>
-            </button>
-          ` : ""}
-          <span class="water-total">${fmtNum(total)}${goals.water ? ` / ${fmtNum(goals.water)}` : ""} oz</span>
-        </span>
+        <span class="water-total">${fmtNum(total)}${goals.water ? ` / ${fmtNum(goals.water)}` : ""} oz</span>
       </div>
       ${renderProgressBar(total, goals.water, "water")}
       <div class="water-quick-row" style="margin-top:10px;">
         <button class="water-qty-btn" data-action="water-quick-add" data-amount="8">+8 oz</button>
+        <button class="water-qty-btn" data-action="water-quick-add" data-amount="12">+12 oz</button>
         <button class="water-qty-btn" data-action="water-quick-add" data-amount="16">+16 oz</button>
-        <button class="water-qty-btn" data-action="water-quick-add" data-amount="20">+20 oz</button>
-        <button class="water-qty-btn" data-action="water-quick-add" data-amount="32">+32 oz</button>
+        <button class="water-qty-btn water-edit-btn" data-action="open-edit-water">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+          Edit
+        </button>
       </div>
     </div>
   `;
+}
+
+function renderEditWaterSheet() {
+  const sorted = state.water.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  const rows = sorted.length ? sorted.map((w) => `
+    <div class="water-row">
+      <span class="water-row-amount">${fmtNum(w.amount)} oz</span>
+      <button class="water-row-del" data-action="delete-water" data-id="${w.id}" aria-label="Delete">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  `).join("") : `<div class="empty-meal">No water logged for this day.</div>`;
+
+  return sheetWrap(`Edit Water — ${formatDateLabel(state.logDate)}`, `<div class="water-list">${rows}</div>`);
 }
 
 function renderLogView() {
@@ -354,7 +373,7 @@ function renderLogView() {
     <div class="totals-row">
       <div class="total-card">
         <span class="total-label">Calories</span>
-        <span class="total-value accent">${fmtNum(totals.calories)}${goals.calories ? `<span class="total-unit"> /${fmtNum(goals.calories)}</span>` : ""}</span>
+        <span class="total-value ${calorieGoalColorClass(totals.calories, goals.calories, 1) || "accent"}">${fmtNum(totals.calories)}${goals.calories ? `<span class="total-unit"> /${fmtNum(goals.calories)}</span>` : ""}</span>
         ${renderProgressBar(totals.calories, goals.calories, "")}
       </div>
       <div class="total-card protein">
@@ -522,7 +541,7 @@ function renderWeeklySummary() {
     <div class="summary-cards">
       <div class="summary-card">
         <div class="summary-card-label">Total Calories</div>
-        <div class="summary-card-value">${fmtNum(d.weekTotal.calories)}</div>
+        <div class="summary-card-value ${calorieGoalColorClass(d.weekTotal.calories, goals.calories, 7)}">${fmtNum(d.weekTotal.calories)}</div>
         <div class="summary-card-sub">${d.daysWithData} logged day${d.daysWithData === 1 ? "" : "s"}</div>
       </div>
       ${renderCalorieGoalCard(d.weekTotal.calories, goals.calories, 7)}
@@ -596,7 +615,7 @@ function renderMonthlySummary() {
     <div class="summary-cards">
       <div class="summary-card">
         <div class="summary-card-label">Total Calories</div>
-        <div class="summary-card-value">${fmtNum(d.monthTotal.calories)}</div>
+        <div class="summary-card-value ${calorieGoalColorClass(d.monthTotal.calories, goals.calories, d.range.days.length)}">${fmtNum(d.monthTotal.calories)}</div>
         <div class="summary-card-sub">${d.daysWithData} logged day${d.daysWithData === 1 ? "" : "s"}</div>
       </div>
       ${renderCalorieGoalCard(d.monthTotal.calories, goals.calories, d.range.days.length)}
@@ -646,6 +665,7 @@ function renderSheet() {
   if (s.type === "new-favorite") return renderFavoriteBuilderSheet(s);
   if (s.type === "menu") return renderMenuSheet(s);
   if (s.type === "goals") return renderGoalsSheet(s);
+  if (s.type === "edit-water") return renderEditWaterSheet();
   return "";
 }
 
@@ -1359,19 +1379,17 @@ async function handleAction(action, ds, el) {
       renderMain();
       break;
     }
+    case "open-edit-water":
+      state.sheet = { type: "edit-water" };
+      renderSheetRoot();
+      break;
     case "delete-water": {
       await dbDeleteWater(ds.id);
       await refreshWater();
       renderMain();
-      break;
-    }
-    case "undo-last-water": {
-      const last = state.water.reduce((a, b) => (!a || (b.createdAt || 0) > (a.createdAt || 0) ? b : a), null);
-      if (last) {
-        await dbDeleteWater(last.id);
-        await refreshWater();
-        renderMain();
-      }
+      // The edit sheet may be open showing the list this row came from —
+      // re-render it too so the deleted row disappears immediately.
+      if (state.sheet && state.sheet.type === "edit-water") renderSheetRoot();
       break;
     }
 
