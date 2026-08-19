@@ -265,11 +265,15 @@ function renderCalorieGoalCard(totalCalories, dailyGoal, numDays) {
     `;
   }
   const periodGoal = dailyGoal * numDays;
-  const diff = round1(periodGoal - totalCalories);
+  // Logged minus goal: negative means under budget (good, green),
+  // positive means over (bad, red) — the goal reads as a ceiling to stay
+  // under, not a target to reach.
+  const diff = round1(totalCalories - periodGoal);
+  const colorClass = diff > 0 ? "over-goal" : "under-goal";
   return `
     <div class="summary-card">
       <div class="summary-card-label">Calorie Goal</div>
-      <div class="summary-card-value">${diff > 0 ? "+" : ""}${fmtNum(diff)}<span class="total-unit"> kcal</span></div>
+      <div class="summary-card-value ${colorClass}">${diff > 0 ? "+" : ""}${fmtNum(diff)}<span class="total-unit"> kcal</span></div>
     </div>
   `;
 }

@@ -354,6 +354,8 @@ input::placeholder { color: var(--muted-2); }
 .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
 .summary-card-label { color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 5px; }
 .summary-card-value { color: var(--text); font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.summary-card-value.under-goal { color: var(--protein); }
+.summary-card-value.over-goal { color: var(--red); }
 .summary-card-sub { color: var(--muted); font-size: 11px; margin-top: 3px; }
 .macro-mini-row { display: flex; gap: 6px; margin-top: 4px; font-size: 9px; white-space: nowrap; }
 .macro-mini-row span.p { color: var(--protein); }
