@@ -912,7 +912,7 @@ function renderAddItemSection(s) {
       <button class="segmented-btn ${ai.tab === "manual" ? "active" : ""}" data-action="additem-tab" data-tab="manual">Manual</button>
     </div>
   `;
-  const body = ai.tab === "scan" ? renderAddItemScan(ai) : renderAddItemManual();
+  const body = ai.tab === "scan" ? renderAddItemScan(ai) : renderAddItemManual(ai);
   return `<div style="padding-top:4px; border-top:1px solid var(--border); margin-top:10px;">${tabs}${body}</div>`;
 }
 
@@ -969,24 +969,48 @@ function renderAddItemScan(ai) {
   `;
 }
 
-function renderAddItemManual() {
+function renderAddItemManual(ai) {
+  const m = ai.manual;
+  const search = ai.manualSearch;
+
+  const searchResults = search.results.length ? `
+    <div class="fav-list" style="margin-bottom:14px;">
+      ${search.results.map((r, i) => `
+        <div class="fav-row" data-action="additem-pick-search-result" data-index="${i}">
+          <div class="fav-main">
+            <div class="fav-name">${escapeHtml(r.name)}</div>
+            <div class="fav-meta">${r.brand ? escapeHtml(r.brand) + " · " : ""}${fmtNum(r.perUnit.calories)} kcal per ${escapeHtml(r.baseLabel)}</div>
+          </div>
+        </div>
+      `).join("")}
+    </div>
+  ` : "";
+
   return `
-    <form id="favItemForm" style="margin-top:10px;">
+    <form id="additemSearchForm" style="display:flex; gap:8px; margin: 10px 0 4px;">
+      <input type="search" name="query" id="additemSearchInput" placeholder="Search USDA by name (e.g. grapes)" value="${escapeHtml(search.query)}" style="flex:1;">
+      <button type="submit" class="btn btn-secondary btn-sm">Search</button>
+    </form>
+    ${search.loading ? `<div class="scan-hint" style="text-align:left; margin:8px 0;">Searching…</div>` : ""}
+    ${search.error ? `<div class="error-text">${escapeHtml(search.error)}</div>` : ""}
+    ${!search.loading && search.searched && search.results.length === 0 ? `<div class="scan-hint" style="text-align:left; margin:8px 0;">No matches — try a different search, or fill in the form below by hand.</div>` : ""}
+    ${searchResults}
+    <form id="favItemForm">
       <div class="field-wrap">
         <span class="field-label">Food name</span>
-        <input type="text" name="name" placeholder="e.g. Brown rice" required>
+        <input type="text" name="name" placeholder="e.g. Brown rice" value="${escapeHtml(m.name)}" required>
       </div>
       <div class="form-grid">
         <div class="field-wrap">
           <span class="field-label">Quantity</span>
-          <input type="number" name="quantity" step="0.25" min="0.25" value="1" required>
+          <input type="number" name="quantity" step="0.25" min="0.25" value="${m.quantity}" required>
         </div>
         <div class="field-wrap">
           <span class="field-label">Unit</span>
-          <input type="text" name="unit" placeholder="e.g. cup" value="serving" required>
+          <input type="text" name="unit" placeholder="e.g. cup" value="${escapeHtml(m.unit)}" required>
         </div>
       </div>
-      ${renderNutritionInputs({ calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, satFat: 0, sodium: 0 })}
+      ${renderNutritionInputs(m)}
       <button type="submit" class="btn btn-secondary btn-block">Add Item</button>
     </form>
   `;
@@ -1190,6 +1214,16 @@ async function handleAction(action, ds, el) {
       renderSheetRoot();
       break;
     }
+    case "additem-pick-search-result": {
+      const ai = state.sheet.addingItem;
+      const r = ai.manualSearch.results[parseInt(ds.index, 10)];
+      if (r) {
+        ai.manual = { name: r.name, quantity: 1, unit: r.baseLabel, ...r.perUnit };
+        ai.manualSearch.results = [];
+      }
+      renderSheetRoot();
+      break;
+    }
     case "scan-qty": {
       const delta = parseFloat(ds.delta);
       state.sheet.qty = Math.max(0.25, Math.round((state.sheet.qty + delta) * 100) / 100);
@@ -1293,7 +1327,7 @@ async function handleAction(action, ds, el) {
       break;
     }
     case "show-add-item-form":
-      state.sheet.addingItem = { tab: "scan", product: null, lookupLoading: false, scanError: null, qty: 1 };
+      state.sheet.addingItem = { tab: "scan", product: null, lookupLoading: false, scanError: null, qty: 1, manual: newManualDraft(), manualSearch: newManualSearchState() };
       renderSheetRoot();
       break;
     case "additem-tab":
@@ -1474,6 +1508,27 @@ function attachGlobalListeners() {
       return;
     }
 
+    if (e.target.id === "additemSearchForm") {
+      e.preventDefault();
+      const query = new FormData(e.target).get("query").trim();
+      const search = state.sheet.addingItem.manualSearch;
+      search.query = query;
+      if (!query) return;
+      search.loading = true;
+      search.error = null;
+      renderSheetRoot();
+      try {
+        search.results = await searchFoodUSDA(query);
+        search.searched = true;
+      } catch (err) {
+        search.error = err.message || "Search failed.";
+        search.results = [];
+      }
+      search.loading = false;
+      renderSheetRoot();
+      return;
+    }
+
     if (e.target.id === "goalsForm") {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -1579,6 +1634,9 @@ function attachGlobalListeners() {
       // mid-typing — no re-render here, this field doesn't filter anything
       // locally, searching only happens on submit.
       state.sheet.manualSearch.query = e.target.value;
+    }
+    if (e.target.id === "additemSearchInput") {
+      state.sheet.addingItem.manualSearch.query = e.target.value;
     }
     if (e.target.name === "quantity" && e.target.closest("#editEntryForm")) {
       const perUnit = state.sheet.entry.perUnit;
