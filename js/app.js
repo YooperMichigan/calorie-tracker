@@ -322,19 +322,19 @@ function renderLogView() {
     </div>
 
     <div class="totals-row-secondary">
-      <div class="total-card-mini">
+      <div class="total-card">
         <span class="total-label">Fiber</span>
         <span class="total-value">${fmtNum(totals.fiber)}<span class="total-unit">g</span></span>
       </div>
-      <div class="total-card-mini">
+      <div class="total-card">
         <span class="total-label">Sugar</span>
         <span class="total-value">${fmtNum(totals.sugar)}<span class="total-unit">g</span></span>
       </div>
-      <div class="total-card-mini">
+      <div class="total-card">
         <span class="total-label">Sat Fat</span>
         <span class="total-value">${fmtNum(totals.satFat)}<span class="total-unit">g</span></span>
       </div>
-      <div class="total-card-mini">
+      <div class="total-card">
         <span class="total-label">Sodium</span>
         <span class="total-value">${fmtNum(totals.sodium)}<span class="total-unit">mg</span></span>
       </div>
