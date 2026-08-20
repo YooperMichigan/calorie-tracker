@@ -8,14 +8,18 @@ const state = {
   entries: [],                 // entries for state.logDate
   favorites: [],                // all favorites, cached
   water: [],                    // water entries for state.logDate
+  supplements: [],              // supplement entries for state.logDate
+  savedSupplements: [],         // all saved supplements, cached
 
   mealsSearch: "",
 
-  summaryMode: "weekly",       // 'weekly' | 'monthly'
+  summaryMode: "weekly",       // 'weekly' | 'monthly' | 'supplements'
   weekAnchor: todayISO(),
   monthAnchor: todayISO(),
+  supplementsAnchor: todayISO(),
   weeklyData: null,
   monthlyData: null,
+  supplementsData: null,
 
   sheet: null,                 // current open sheet descriptor, or null
 };
@@ -26,6 +30,8 @@ async function init() {
   state.entries = await dbGetEntriesForDate(state.logDate);
   state.favorites = await dbGetAllFavorites();
   state.water = await dbGetWaterForDate(state.logDate);
+  state.supplements = await dbGetSupplementsForDate(state.logDate);
+  state.savedSupplements = await dbGetAllSavedSupplements();
   renderAll();
   attachGlobalListeners();
 }
@@ -121,6 +127,15 @@ async function refreshWater() {
   state.water = await dbGetWaterForDate(state.logDate);
 }
 
+async function refreshSupplements() {
+  state.supplements = await dbGetSupplementsForDate(state.logDate);
+  state.supplementsData = null;
+}
+
+async function refreshSavedSupplements() {
+  state.savedSupplements = await dbGetAllSavedSupplements();
+}
+
 function sumWater(water) {
   return water.reduce((s, w) => s + (w.amount || 0), 0);
 }
@@ -190,6 +205,24 @@ async function refreshMonthlyData() {
   };
 
   state.monthlyData = { range, dailyTotals, monthTotal, monthWater, daysWithData, mealTotals, avg, weeklyAvg };
+}
+
+async function refreshSupplementsData() {
+  const range = monthRangeFor(state.supplementsAnchor);
+  const startISO = range.days[0], endISO = range.days[range.days.length - 1];
+  const all = await dbGetSupplementsForDateRange(startISO, endISO);
+  // Newest day first, and within a day, most-recently-logged first.
+  const byDate = new Map();
+  all.forEach((s) => {
+    if (!byDate.has(s.date)) byDate.set(s.date, []);
+    byDate.get(s.date).push(s);
+  });
+  const days = Array.from(byDate.keys()).sort().reverse().map((date) => ({
+    date,
+    items: byDate.get(date).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+  }));
+
+  state.supplementsData = { range, days, total: all.length };
 }
 
 // ============================================================================
@@ -403,6 +436,42 @@ function renderLogView() {
     ${renderWaterCard()}
 
     ${mealSections}
+
+    ${renderSupplementsSection()}
+  `;
+}
+
+function renderSupplementsSection() {
+  const rows = state.supplements.length
+    ? state.supplements.map(renderSupplementRow).join("")
+    : `<div class="empty-meal">Nothing logged yet</div>`;
+  return `
+    <section class="meal-section">
+      <div class="meal-header">
+        <div class="meal-title-wrap">
+          <span class="meal-title">Supplements</span>
+          <span class="meal-kcal">${state.supplements.length} logged</span>
+        </div>
+        <button class="add-btn" data-action="open-add-supplement-sheet" aria-label="Add supplement">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <div class="entry-list">${rows}</div>
+    </section>
+  `;
+}
+
+function renderSupplementRow(s) {
+  return `
+    <div class="entry-row">
+      <div class="entry-main">
+        <div class="entry-name">${escapeHtml(s.name)}</div>
+        ${s.dose ? `<div class="entry-meta"><span>${escapeHtml(s.dose)}</span></div>` : ""}
+      </div>
+      <button class="entry-del" data-action="delete-supplement" data-id="${s.id}" aria-label="Delete">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+      </button>
+    </div>
   `;
 }
 
@@ -481,9 +550,14 @@ function renderSummaryView() {
     <div class="section-tabs">
       <button class="section-tab ${state.summaryMode === "weekly" ? "active" : ""}" data-action="summary-mode" data-mode="weekly">Weekly</button>
       <button class="section-tab ${state.summaryMode === "monthly" ? "active" : ""}" data-action="summary-mode" data-mode="monthly">Monthly</button>
+      <button class="section-tab ${state.summaryMode === "supplements" ? "active" : ""}" data-action="summary-mode" data-mode="supplements">Supplements</button>
     </div>
   `;
-  return modeTabs + (state.summaryMode === "weekly" ? renderWeeklySummary() : renderMonthlySummary());
+  let body;
+  if (state.summaryMode === "weekly") body = renderWeeklySummary();
+  else if (state.summaryMode === "monthly") body = renderMonthlySummary();
+  else body = renderSupplementsSummary();
+  return modeTabs + body;
 }
 
 function renderWeeklySummary() {
@@ -646,6 +720,52 @@ function renderMonthlySummary() {
   `;
 }
 
+function renderSupplementsSummary() {
+  if (!state.supplementsData) return `<div class="chart-empty">Loading…</div>`;
+  const d = state.supplementsData;
+  const thisMonth = monthRangeFor(todayISO());
+  const isCurrentMonth = thisMonth.year === d.range.year && thisMonth.month === d.range.month;
+
+  const dayGroups = d.days.length ? d.days.map((day) => `
+    <div class="chart-card" style="margin-bottom:10px;">
+      <div class="chart-title">${escapeHtml(formatDateLabel(day.date))}</div>
+      <div class="entry-list">
+        ${day.items.map((s) => `
+          <div class="entry-row">
+            <div class="entry-main">
+              <div class="entry-name">${escapeHtml(s.name)}</div>
+              ${s.dose ? `<div class="entry-meta"><span>${escapeHtml(s.dose)}</span></div>` : ""}
+            </div>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `).join("") : `<div class="chart-empty">No supplements logged this month</div>`;
+
+  return `
+    <div class="date-nav">
+      <button class="date-nav-btn" data-action="supp-month-prev" aria-label="Previous month">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </button>
+      <div class="date-nav-label"><span class="date-nav-main">${formatMonthLabel(d.range)}</span></div>
+      ${!isCurrentMonth ? `<button class="today-btn" data-action="supp-month-today">This Month</button>` : `<span style="width:34px"></span>`}
+      <button class="date-nav-btn" data-action="supp-month-next" aria-label="Next month">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+    </div>
+
+    <div class="summary-cards">
+      <div class="summary-card">
+        <div class="summary-card-label">Total Logged</div>
+        <div class="summary-card-value">${fmtNum(d.total)}</div>
+        <div class="summary-card-sub">${d.days.length} day${d.days.length === 1 ? "" : "s"} with entries</div>
+      </div>
+    </div>
+
+    ${dayGroups}
+  `;
+}
+
 // ============================================================================
 // Sheets
 // ============================================================================
@@ -659,6 +779,7 @@ function renderSheet() {
   if (s.type === "menu") return renderMenuSheet(s);
   if (s.type === "goals") return renderGoalsSheet(s);
   if (s.type === "edit-water") return renderEditWaterSheet();
+  if (s.type === "add-supplement") return renderAddSupplementSheet(s);
   return "";
 }
 
@@ -908,6 +1029,116 @@ function renderFavoritesTab(s) {
     </div>
     <div class="fav-list">${rows}</div>
   `;
+}
+
+// ---------- Add-supplement sheet (scan / manual / saved) ----------
+// Deliberately lighter-weight than the food Add sheet: supplements don't
+// carry macros, just a name and an optional free-text dose (e.g. "2000 IU",
+// "2 capsules"), so they get their own small render/action set rather than
+// reusing the nutrition-heavy food forms.
+
+function renderAddSupplementSheet(s) {
+  const tabs = `
+    <div class="segmented">
+      <button class="segmented-btn ${s.tab === "scan" ? "active" : ""}" data-action="supp-sheet-tab" data-tab="scan">Scan</button>
+      <button class="segmented-btn ${s.tab === "manual" ? "active" : ""}" data-action="supp-sheet-tab" data-tab="manual">Manual</button>
+      <button class="segmented-btn ${s.tab === "saved" ? "active" : ""}" data-action="supp-sheet-tab" data-tab="saved">Saved</button>
+    </div>
+  `;
+  let body = "";
+  if (s.tab === "scan") body = renderSupplementScanTab(s);
+  else if (s.tab === "manual") body = renderSupplementManualTab(s);
+  else body = renderSupplementSavedTab(s);
+
+  return sheetWrap("Add Supplement", tabs + body);
+}
+
+function renderSupplementScanTab(s) {
+  if (s.scanError) {
+    return `
+      <div class="scan-status">${escapeHtml(s.scanError)}</div>
+      <button class="btn btn-secondary btn-block" data-action="supp-rescan">Try Again</button>
+      <button class="link-btn" data-action="supp-sheet-tab" data-tab="manual" style="display:block; text-align:center; margin-top:10px;">Enter manually instead</button>
+    `;
+  }
+
+  if (s.lookupLoading) {
+    return `<div class="scan-status">Looking up product…</div>`;
+  }
+
+  if (s.product) {
+    if (!s.product.found) {
+      return `
+        <div class="scan-status">No match found for barcode ${escapeHtml(s.product.barcode)}.</div>
+        <button class="btn btn-primary btn-block" data-action="supp-manual-from-scan">Enter Manually</button>
+        <button class="link-btn" data-action="supp-rescan" style="display:block; text-align:center; margin-top:10px;">Scan again</button>
+      `;
+    }
+    const p = s.product;
+    return `
+      <div class="product-card">
+        <div class="product-name">${escapeHtml(p.name)}</div>
+        ${p.brand ? `<div class="product-brand">${escapeHtml(p.brand)}</div>` : ""}
+        <div class="field-wrap" style="margin-top:10px;">
+          <span class="field-label">Dose</span>
+          <input type="text" id="suppScanDose" placeholder="e.g. 2000 IU, 2 capsules" value="${escapeHtml(p.dose || "")}">
+        </div>
+      </div>
+      <div class="checkbox-row fav-checkbox-hint">
+        <input type="checkbox" id="suppScanSaveFav" ${s.saveFav ? "checked" : ""}>
+        <label for="suppScanSaveFav">Save for quick re-add</label>
+      </div>
+      <button class="btn btn-primary btn-block" data-action="confirm-scan-add-supplement">Add Supplement</button>
+      <button class="link-btn" data-action="supp-rescan" style="display:block; text-align:center; margin-top:10px;">Scan a different item</button>
+    `;
+  }
+
+  return `
+    <div class="scan-wrap"><div id="qr-reader"></div></div>
+    <div class="scan-hint">Hold the barcode flat, well-lit, and steady, filling most of the frame.</div>
+    <div class="scan-hint" id="scanDiag">Starting camera…</div>
+    <button class="link-btn" data-action="supp-sheet-tab" data-tab="manual" style="display:block; text-align:center;">Can't scan it? Enter manually</button>
+  `;
+}
+
+function renderSupplementManualTab(s) {
+  const m = s.manual;
+  return `
+    <form id="supplementManualForm">
+      <div class="field-wrap">
+        <span class="field-label">Supplement name</span>
+        <input type="text" name="name" placeholder="e.g. Vitamin D3" value="${escapeHtml(m.name)}" required>
+      </div>
+      <div class="field-wrap">
+        <span class="field-label">Dose (optional)</span>
+        <input type="text" name="dose" placeholder="e.g. 2000 IU, 2 capsules" value="${escapeHtml(m.dose)}">
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="suppManualSaveFav" ${s.saveFav ? "checked" : ""}>
+        <label for="suppManualSaveFav">Save for quick re-add</label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Add Supplement</button>
+    </form>
+  `;
+}
+
+function renderSupplementSavedTab(s) {
+  const list = state.savedSupplements;
+  const rows = list.length ? list.map((sup) => `
+    <div class="fav-row" data-action="log-saved-supplement" data-id="${sup.id}">
+      <div class="fav-main">
+        <div class="fav-name">${escapeHtml(sup.name)}</div>
+        ${sup.dose ? `<div class="fav-meta">${escapeHtml(sup.dose)}</div>` : ""}
+      </div>
+      <div class="fav-actions">
+        <button class="fav-icon-btn" data-action="delete-saved-supplement" data-id="${sup.id}" aria-label="Remove">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
+        </button>
+      </div>
+    </div>
+  `).join("") : `<div class="empty-meal" style="padding:28px 10px;">No saved supplements yet. Scan or enter one and check "Save for quick re-add".</div>`;
+
+  return `<div class="fav-list">${rows}</div>`;
 }
 
 // ---------- Edit entry sheet ----------
@@ -1194,6 +1425,7 @@ function activeScanTarget() {
   const s = state.sheet;
   if (!s) return null;
   if (s.type === "add" && s.tab === "scan") return s;
+  if (s.type === "add-supplement" && s.tab === "scan") return s;
   if (s.type === "new-favorite" && s.addingItem && s.addingItem.tab === "scan") return s.addingItem;
   return null;
 }
@@ -1223,15 +1455,16 @@ async function onBarcodeDetected(code) {
   await BarcodeScanner.stop();
   let target = activeScanTarget();
   if (!target) return;
+  const isSupplement = state.sheet && state.sheet.type === "add-supplement";
   target.lookupLoading = true;
   renderSheetRoot();
   try {
-    const product = await lookupBarcode(code);
+    const product = isSupplement ? await lookupSupplementBarcode(code) : await lookupBarcode(code);
     target = activeScanTarget();
     if (!target) return;
     target.lookupLoading = false;
     target.product = product;
-    target.qty = 1;
+    if (!isSupplement) target.qty = 1;
   } catch (err) {
     target = activeScanTarget();
     if (!target) return;
@@ -1277,9 +1510,9 @@ async function handleAction(action, ds, el) {
     }
 
     // ---- day nav ----
-    case "day-prev": state.logDate = addDays(state.logDate, -1); await Promise.all([refreshEntries(), refreshWater()]); renderMain(); break;
-    case "day-next": state.logDate = addDays(state.logDate, 1); await Promise.all([refreshEntries(), refreshWater()]); renderMain(); break;
-    case "day-today": state.logDate = todayISO(); await Promise.all([refreshEntries(), refreshWater()]); renderMain(); break;
+    case "day-prev": state.logDate = addDays(state.logDate, -1); await Promise.all([refreshEntries(), refreshWater(), refreshSupplements()]); renderMain(); break;
+    case "day-next": state.logDate = addDays(state.logDate, 1); await Promise.all([refreshEntries(), refreshWater(), refreshSupplements()]); renderMain(); break;
+    case "day-today": state.logDate = todayISO(); await Promise.all([refreshEntries(), refreshWater(), refreshSupplements()]); renderMain(); break;
     case "day-pick": {
       const input = document.getElementById("hiddenDatePicker");
       input.value = state.logDate;
@@ -1406,6 +1639,67 @@ async function handleAction(action, ds, el) {
       break;
     }
 
+    // ---- supplements ----
+    case "open-add-supplement-sheet":
+      state.sheet = { type: "add-supplement", tab: "scan", product: null, lookupLoading: false, scanError: null, saveFav: false, manual: { name: "", dose: "" } };
+      renderSheetRoot();
+      break;
+    case "supp-sheet-tab":
+      await BarcodeScanner.stop();
+      state.sheet.tab = ds.tab;
+      if (ds.tab === "scan") { state.sheet.product = null; state.sheet.scanError = null; }
+      renderSheetRoot();
+      break;
+    case "supp-rescan":
+      state.sheet.product = null; state.sheet.scanError = null; state.sheet.lookupLoading = false;
+      renderSheetRoot();
+      break;
+    case "supp-manual-from-scan": {
+      const barcode = state.sheet.product && state.sheet.product.barcode;
+      state.sheet.tab = "manual";
+      state.sheet.manual = { name: "", dose: "" };
+      state.sheet.scannedBarcode = barcode || null;
+      renderSheetRoot();
+      break;
+    }
+    case "confirm-scan-add-supplement": {
+      const s = state.sheet;
+      const p = s.product;
+      const dose = document.getElementById("suppScanDose")?.value.trim() || "";
+      const saveFav = !!document.getElementById("suppScanSaveFav")?.checked;
+      const supplement = { id: uuid(), date: state.logDate, name: p.name, dose, brand: p.brand || "", barcode: p.barcode, source: "barcode", createdAt: Date.now() };
+      await dbAddSupplement(supplement);
+      if (saveFav) await dbAddSavedSupplement({ id: uuid(), name: supplement.name, dose: supplement.dose, brand: supplement.brand, barcode: supplement.barcode, createdAt: Date.now() });
+      await refreshSupplements();
+      if (saveFav) await refreshSavedSupplements();
+      await closeSheet();
+      renderMain();
+      showToast("Supplement added", "success");
+      break;
+    }
+    case "log-saved-supplement": {
+      const sup = state.savedSupplements.find((x) => x.id === ds.id);
+      if (sup) {
+        await dbAddSupplement({ id: uuid(), date: state.logDate, name: sup.name, dose: sup.dose || "", brand: sup.brand || "", barcode: sup.barcode || null, source: "saved", createdAt: Date.now() });
+        await refreshSupplements();
+        await closeSheet();
+        renderMain();
+        showToast(`Added "${sup.name}"`, "success");
+      }
+      break;
+    }
+    case "delete-saved-supplement":
+      await dbDeleteSavedSupplement(ds.id);
+      await refreshSavedSupplements();
+      renderSheetRoot();
+      break;
+    case "delete-supplement":
+      await dbDeleteSupplement(ds.id);
+      await refreshSupplements();
+      renderMain();
+      showToast("Supplement removed", "success");
+      break;
+
     // ---- my meals ----
     case "new-favorite":
       state.sheet = { type: "new-favorite", name: "", items: [], addingItem: null, editingFavId: null };
@@ -1520,6 +1814,9 @@ async function handleAction(action, ds, el) {
     case "month-prev": state.monthAnchor = addMonths(state.monthAnchor, -1); await refreshMonthlyData(); renderMain(); break;
     case "month-next": state.monthAnchor = addMonths(state.monthAnchor, 1); await refreshMonthlyData(); renderMain(); break;
     case "month-today": state.monthAnchor = todayISO(); await refreshMonthlyData(); renderMain(); break;
+    case "supp-month-prev": state.supplementsAnchor = addMonths(state.supplementsAnchor, -1); await refreshSupplementsData(); renderMain(); break;
+    case "supp-month-next": state.supplementsAnchor = addMonths(state.supplementsAnchor, 1); await refreshSupplementsData(); renderMain(); break;
+    case "supp-month-today": state.supplementsAnchor = todayISO(); await refreshSupplementsData(); renderMain(); break;
 
     // ---- menu / backup ----
     case "open-menu": state.sheet = { type: "menu" }; renderSheetRoot(); break;
@@ -1569,6 +1866,7 @@ async function logFavoriteToMeal(fav, meal, date) {
 async function ensureSummaryDataLoaded() {
   if (state.summaryMode === "weekly" && !state.weeklyData) await refreshWeeklyData();
   if (state.summaryMode === "monthly" && !state.monthlyData) await refreshMonthlyData();
+  if (state.summaryMode === "supplements" && !state.supplementsData) await refreshSupplementsData();
 }
 
 // ============================================================================
@@ -1676,6 +1974,24 @@ function attachGlobalListeners() {
       return;
     }
 
+    if (e.target.id === "supplementManualForm") {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const s = state.sheet;
+      const name = fd.get("name").trim();
+      const dose = fd.get("dose").trim();
+      const saveFav = !!document.getElementById("suppManualSaveFav")?.checked;
+      const barcode = s.scannedBarcode || null;
+      await dbAddSupplement({ id: uuid(), date: state.logDate, name, dose, brand: "", barcode, source: "manual", createdAt: Date.now() });
+      if (saveFav) await dbAddSavedSupplement({ id: uuid(), name, dose, brand: "", barcode, createdAt: Date.now() });
+      await refreshSupplements();
+      if (saveFav) await refreshSavedSupplements();
+      await closeSheet();
+      renderMain();
+      showToast("Supplement added", "success");
+      return;
+    }
+
     if (e.target.id === "editEntryForm") {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -1761,7 +2077,7 @@ function attachGlobalListeners() {
   document.addEventListener("change", async (e) => {
     if (e.target.id === "hiddenDatePicker") {
       state.logDate = e.target.value || state.logDate;
-      await Promise.all([refreshEntries(), refreshWater()]);
+      await Promise.all([refreshEntries(), refreshWater(), refreshSupplements()]);
       renderMain();
     }
     if (e.target.id === "importFileInput") {
@@ -1771,9 +2087,8 @@ function attachGlobalListeners() {
       if (!confirm("Restoring will replace all current data on this device with the contents of the backup file. Continue?")) return;
       try {
         const { entryCount, favoriteCount } = await importBackupFile(file);
-        await refreshEntries();
-        await refreshFavorites();
-        state.weeklyData = null; state.monthlyData = null;
+        await Promise.all([refreshEntries(), refreshFavorites(), refreshWater(), refreshSupplements(), refreshSavedSupplements()]);
+        state.weeklyData = null; state.monthlyData = null; state.supplementsData = null;
         await closeSheet();
         renderAll();
         showToast(`Restored ${entryCount} entries, ${favoriteCount} saved meals`, "success");

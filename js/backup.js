@@ -1,14 +1,18 @@
 // Export/restore local data as a JSON file, since everything lives only on-device.
 
 async function exportBackup() {
-  const [entries, favorites, water] = await Promise.all([dbGetAllEntries(), dbGetAllFavorites(), dbGetAllWater()]);
+  const [entries, favorites, water, supplements, savedSupplements] = await Promise.all([
+    dbGetAllEntries(), dbGetAllFavorites(), dbGetAllWater(), dbGetAllSupplements(), dbGetAllSavedSupplements(),
+  ]);
   const payload = {
     app: "calorie-tracker",
-    version: 2,
+    version: 3,
     exportedAt: new Date().toISOString(),
     entries,
     favorites,
     water,
+    supplements,
+    savedSupplements,
     goals: getGoals(),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -59,6 +63,14 @@ function isValidWater(w) {
   return w && typeof w.id === "string" && typeof w.date === "string" && typeof w.amount === "number";
 }
 
+function isValidSupplement(s) {
+  return s && typeof s.id === "string" && typeof s.date === "string" && typeof s.name === "string";
+}
+
+function isValidSavedSupplement(s) {
+  return s && typeof s.id === "string" && typeof s.name === "string";
+}
+
 // Replaces all local data with the contents of the backup file.
 async function importBackupFile(file) {
   const text = await readFileAsText(file);
@@ -72,13 +84,15 @@ async function importBackupFile(file) {
   const entries = Array.isArray(parsed.entries) ? parsed.entries.filter(isValidEntry) : [];
   const favorites = Array.isArray(parsed.favorites) ? parsed.favorites.filter(isValidFavorite) : [];
   const water = Array.isArray(parsed.water) ? parsed.water.filter(isValidWater) : [];
+  const supplements = Array.isArray(parsed.supplements) ? parsed.supplements.filter(isValidSupplement) : [];
+  const savedSupplements = Array.isArray(parsed.savedSupplements) ? parsed.savedSupplements.filter(isValidSavedSupplement) : [];
 
-  if (entries.length === 0 && favorites.length === 0 && water.length === 0) {
-    throw new Error("No valid entries, saved meals, or water logs found in that file.");
+  if (entries.length === 0 && favorites.length === 0 && water.length === 0 && supplements.length === 0 && savedSupplements.length === 0) {
+    throw new Error("No valid entries, saved meals, water logs, or supplements found in that file.");
   }
 
   await dbClearAll();
-  await dbBulkPut(entries, favorites, water);
+  await dbBulkPut(entries, favorites, water, supplements, savedSupplements);
   if (parsed.goals && typeof parsed.goals === "object") setGoals(parsed.goals);
   return { entryCount: entries.length, favoriteCount: favorites.length, waterCount: water.length };
 }

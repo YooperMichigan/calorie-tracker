@@ -109,6 +109,42 @@ async function lookupBarcode(barcode) {
   };
 }
 
+// Supplement barcode lookup — same Open Food Facts product endpoint (it
+// carries plenty of vitamin/supplement retail products too, since anything
+// with a barcode can be listed), but pulls just name/brand/serving_size
+// rather than the full macro set food entries need.
+const OFF_SUPPLEMENT_FIELDS = "product_name,brands,serving_size,quantity";
+
+async function lookupSupplementBarcode(barcode) {
+  const url = `${OFF_BASE}${encodeURIComponent(barcode)}.json?fields=${OFF_SUPPLEMENT_FIELDS}`;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    throw new Error("Network error — check your connection and try again.");
+  }
+  if (!res.ok) throw new Error(`Lookup failed (HTTP ${res.status}).`);
+  const data = await res.json();
+
+  if (data.status !== 1 || !data.product) {
+    return { found: false, barcode };
+  }
+
+  const p = data.product;
+  const name = p.product_name && p.product_name.trim() ? p.product_name.trim() : "Unnamed product";
+  const dose = (p.serving_size && String(p.serving_size).trim())
+    || (p.quantity && String(p.quantity).trim())
+    || "";
+
+  return {
+    found: true,
+    barcode,
+    name,
+    brand: p.brands ? p.brands.split(",")[0].trim() : "",
+    dose,
+  };
+}
+
 // ============================================================================
 // USDA FoodData Central — free-text search for generic/whole foods (produce,
 // meats, grains, etc.) that don't carry a barcode. CORS-enabled, unlike

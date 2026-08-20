@@ -10,10 +10,12 @@
 // and its API is async so large reads never block the UI thread.
 
 const DB_NAME = "calorieTrackerDB";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const STORE_ENTRIES = "entries";
 const STORE_FAVORITES = "favorites";
 const STORE_WATER = "water";
+const STORE_SUPPLEMENTS = "supplements";
+const STORE_SAVED_SUPPLEMENTS = "savedSupplements";
 
 let _dbPromise = null;
 
@@ -33,6 +35,13 @@ function dbOpen() {
       if (!db.objectStoreNames.contains(STORE_WATER)) {
         const water = db.createObjectStore(STORE_WATER, { keyPath: "id" });
         water.createIndex("date", "date", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(STORE_SUPPLEMENTS)) {
+        const supplements = db.createObjectStore(STORE_SUPPLEMENTS, { keyPath: "id" });
+        supplements.createIndex("date", "date", { unique: false });
+      }
+      if (!db.objectStoreNames.contains(STORE_SAVED_SUPPLEMENTS)) {
+        db.createObjectStore(STORE_SAVED_SUPPLEMENTS, { keyPath: "id" });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -143,29 +152,82 @@ async function dbGetAllWater() {
   return reqToPromise(store.getAll());
 }
 
+// ---------- supplements ----------
+
+async function dbAddSupplement(entry) {
+  const store = await txStore(STORE_SUPPLEMENTS, "readwrite");
+  await reqToPromise(store.add(entry));
+  return entry;
+}
+
+async function dbDeleteSupplement(id) {
+  const store = await txStore(STORE_SUPPLEMENTS, "readwrite");
+  await reqToPromise(store.delete(id));
+}
+
+async function dbGetSupplementsForDate(dateISO) {
+  const store = await txStore(STORE_SUPPLEMENTS, "readonly");
+  const idx = store.index("date");
+  return reqToPromise(idx.getAll(IDBKeyRange.only(dateISO)));
+}
+
+async function dbGetSupplementsForDateRange(startISO, endISO) {
+  const store = await txStore(STORE_SUPPLEMENTS, "readonly");
+  const idx = store.index("date");
+  return reqToPromise(idx.getAll(IDBKeyRange.bound(startISO, endISO)));
+}
+
+async function dbGetAllSupplements() {
+  const store = await txStore(STORE_SUPPLEMENTS, "readonly");
+  return reqToPromise(store.getAll());
+}
+
+// ---------- saved supplements ----------
+
+async function dbAddSavedSupplement(sup) {
+  const store = await txStore(STORE_SAVED_SUPPLEMENTS, "readwrite");
+  await reqToPromise(store.add(sup));
+  return sup;
+}
+
+async function dbDeleteSavedSupplement(id) {
+  const store = await txStore(STORE_SAVED_SUPPLEMENTS, "readwrite");
+  await reqToPromise(store.delete(id));
+}
+
+async function dbGetAllSavedSupplements() {
+  const store = await txStore(STORE_SAVED_SUPPLEMENTS, "readonly");
+  const all = await reqToPromise(store.getAll());
+  return all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
 // ---------- bulk (backup/restore) ----------
+
+const ALL_STORES = [STORE_ENTRIES, STORE_FAVORITES, STORE_WATER, STORE_SUPPLEMENTS, STORE_SAVED_SUPPLEMENTS];
 
 async function dbClearAll() {
   const db = await dbOpen();
-  const tx = db.transaction([STORE_ENTRIES, STORE_FAVORITES, STORE_WATER], "readwrite");
-  tx.objectStore(STORE_ENTRIES).clear();
-  tx.objectStore(STORE_FAVORITES).clear();
-  tx.objectStore(STORE_WATER).clear();
+  const tx = db.transaction(ALL_STORES, "readwrite");
+  ALL_STORES.forEach((name) => tx.objectStore(name).clear());
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
   });
 }
 
-async function dbBulkPut(entries, favorites, water = []) {
+async function dbBulkPut(entries, favorites, water = [], supplements = [], savedSupplements = []) {
   const db = await dbOpen();
-  const tx = db.transaction([STORE_ENTRIES, STORE_FAVORITES, STORE_WATER], "readwrite");
+  const tx = db.transaction(ALL_STORES, "readwrite");
   const eStore = tx.objectStore(STORE_ENTRIES);
   const fStore = tx.objectStore(STORE_FAVORITES);
   const wStore = tx.objectStore(STORE_WATER);
+  const sStore = tx.objectStore(STORE_SUPPLEMENTS);
+  const ssStore = tx.objectStore(STORE_SAVED_SUPPLEMENTS);
   entries.forEach((e) => eStore.put(e));
   favorites.forEach((f) => fStore.put(f));
   water.forEach((w) => wStore.put(w));
+  supplements.forEach((s) => sStore.put(s));
+  savedSupplements.forEach((s) => ssStore.put(s));
   return new Promise((resolve, reject) => {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
