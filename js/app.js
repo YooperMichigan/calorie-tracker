@@ -373,7 +373,7 @@ function renderLogView() {
     <div class="totals-row">
       <div class="total-card">
         <span class="total-label">Calories</span>
-        <span class="total-value ${calorieGoalColorClass(totals.calories, goals.calories, 1) || "accent"}">${fmtNum(totals.calories)}${goals.calories ? `<span class="total-unit"> /${fmtNum(goals.calories)}</span>` : ""}</span>
+        <span class="total-value accent">${fmtNum(totals.calories)}${goals.calories ? `<span class="total-unit"> /${fmtNum(goals.calories)}</span>` : ""}</span>
         ${renderProgressBar(totals.calories, goals.calories, "")}
       </div>
       <div class="total-card protein">
@@ -394,21 +394,25 @@ function renderLogView() {
     </div>
 
     <div class="totals-row-secondary">
-      <div class="total-card">
+      <div class="total-card fiber">
         <span class="total-label">Fiber</span>
-        <span class="total-value">${fmtNum(totals.fiber)}<span class="total-unit">g</span></span>
+        <span class="total-value">${fmtNum(totals.fiber)}<span class="total-unit">g${goals.fiber ? `/${fmtNum(goals.fiber)}g` : ""}</span></span>
+        ${renderProgressBar(totals.fiber, goals.fiber, "fiber")}
       </div>
-      <div class="total-card">
+      <div class="total-card sugar">
         <span class="total-label">Sugar</span>
-        <span class="total-value">${fmtNum(totals.sugar)}<span class="total-unit">g</span></span>
+        <span class="total-value">${fmtNum(totals.sugar)}<span class="total-unit">g${goals.sugar ? `/${fmtNum(goals.sugar)}g` : ""}</span></span>
+        ${renderProgressBar(totals.sugar, goals.sugar, "sugar")}
       </div>
-      <div class="total-card">
+      <div class="total-card sat-fat">
         <span class="total-label">Sat Fat</span>
-        <span class="total-value">${fmtNum(totals.satFat)}<span class="total-unit">g</span></span>
+        <span class="total-value">${fmtNum(totals.satFat)}<span class="total-unit">g${goals.satFat ? `/${fmtNum(goals.satFat)}g` : ""}</span></span>
+        ${renderProgressBar(totals.satFat, goals.satFat, "sat-fat")}
       </div>
-      <div class="total-card">
+      <div class="total-card sodium">
         <span class="total-label">Sodium</span>
-        <span class="total-value">${fmtNum(totals.sodium)}<span class="total-unit">mg</span></span>
+        <span class="total-value">${fmtNum(totals.sodium)}<span class="total-unit">mg${goals.sodium ? `/${fmtNum(goals.sodium)}mg` : ""}</span></span>
+        ${renderProgressBar(totals.sodium, goals.sodium, "sodium")}
       </div>
     </div>
 
@@ -1164,6 +1168,26 @@ function renderGoalsSheet(s) {
           <input type="number" name="fat" min="0" step="1" placeholder="65" value="${g.fat ?? ""}">
         </div>
       </div>
+      <div class="form-grid-3">
+        <div class="field-wrap">
+          <span class="field-label">Fiber (g)</span>
+          <input type="number" name="fiber" min="0" step="1" placeholder="30" value="${g.fiber ?? ""}">
+        </div>
+        <div class="field-wrap">
+          <span class="field-label">Sugar (g)</span>
+          <input type="number" name="sugar" min="0" step="1" placeholder="50" value="${g.sugar ?? ""}">
+        </div>
+        <div class="field-wrap">
+          <span class="field-label">Sat Fat (g)</span>
+          <input type="number" name="satFat" min="0" step="1" placeholder="20" value="${g.satFat ?? ""}">
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field-wrap">
+          <span class="field-label">Sodium (mg)</span>
+          <input type="number" name="sodium" min="0" step="1" placeholder="2300" value="${g.sodium ?? ""}">
+        </div>
+      </div>
       <button type="submit" class="btn btn-primary btn-block">Save Goals</button>
     </form>
   `);
@@ -1628,6 +1652,10 @@ function attachGlobalListeners() {
         protein: num(fd.get("protein")),
         carbs: num(fd.get("carbs")),
         fat: num(fd.get("fat")),
+        fiber: num(fd.get("fiber")),
+        sugar: num(fd.get("sugar")),
+        satFat: num(fd.get("satFat")),
+        sodium: num(fd.get("sodium")),
         water: num(fd.get("water")),
       });
       await closeSheet();

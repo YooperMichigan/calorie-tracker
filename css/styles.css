@@ -32,6 +32,9 @@
   --meal-dinner: #3a7fc4;
   --meal-snacks: #b9821a;
   --fiber: #8a6a3a;
+  --sugar: #8452c9;
+  --sat-fat: #4a52c9;
+  --sodium: #1f9c8a;
   --tab-bar-bg: rgba(243, 244, 242, 0.85);
 }
 
@@ -67,6 +70,9 @@
     --meal-dinner: #7aa7e0;
     --meal-snacks: #e0b354;
     --fiber: #c9a06a;
+    --sugar: #b599e0;
+    --sat-fat: #98a0e0;
+    --sodium: #5ac9b5;
     --tab-bar-bg: rgba(16, 20, 19, 0.92);
   }
 }
@@ -102,6 +108,9 @@
   --meal-dinner: #7aa7e0;
   --meal-snacks: #e0b354;
   --fiber: #c9a06a;
+  --sugar: #b599e0;
+  --sat-fat: #98a0e0;
+  --sodium: #5ac9b5;
   --tab-bar-bg: rgba(16, 20, 19, 0.92);
 }
 
@@ -188,6 +197,10 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
 .total-card.protein .total-value { color: var(--protein); }
 .total-card.carbs .total-value { color: var(--carbs); }
 .total-card.fat .total-value { color: var(--fat); }
+.total-card.fiber .total-value { color: var(--fiber); }
+.total-card.sugar .total-value { color: var(--sugar); }
+.total-card.sat-fat .total-value { color: var(--sat-fat); }
+.total-card.sodium .total-value { color: var(--sodium); }
 
 /* ---------- meal sections ---------- */
 .meal-section { margin-bottom: 14px; }
@@ -404,4 +417,8 @@ svg text { font-family: -apple-system, sans-serif; }
 .progress-fill.carbs { background: var(--carbs); }
 .progress-fill.fat { background: var(--fat); }
 .progress-fill.water { background: var(--water); }
+.progress-fill.fiber { background: var(--fiber); }
+.progress-fill.sugar { background: var(--sugar); }
+.progress-fill.sat-fat { background: var(--sat-fat); }
+.progress-fill.sodium { background: var(--sodium); }
 .goal-hint { color: var(--muted); font-size: 11px; margin-top: 3px; }
