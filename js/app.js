@@ -420,7 +420,7 @@ function renderLogView() {
         <div class="meal-header">
           <div class="meal-title-wrap">
             <span class="meal-title">${MEAL_LABELS[meal]}</span>
-            <span class="meal-kcal">${fmtNum(mealTotals.calories)} kcal</span>
+            <span class="meal-kcal meal-macro-cal">${fmtNum(mealTotals.calories)} kcal</span>
             <span class="meal-kcal meal-macro-p">P ${fmtNum(mealTotals.protein)}g</span>
             <span class="meal-kcal meal-macro-fi">Fi ${fmtNum(mealTotals.fiber)}g</span>
           </div>

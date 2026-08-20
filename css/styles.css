@@ -209,6 +209,7 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
 .meal-title-wrap { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; row-gap: 2px; }
 .meal-title { font-size: 14px; font-weight: 600; color: var(--text); }
 .meal-kcal { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.meal-macro-cal { color: var(--accent); font-weight: 600; }
 .meal-macro-p { color: var(--protein); }
 .meal-macro-fi { color: var(--fiber); }
 .add-btn {
@@ -277,11 +278,13 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
 .sheet {
   /* Never let the sheet grow tall enough to push its header (and Close
      button) up under the status bar / notch — cap against the safe-area
-     inset, not just a flat vh percentage, so a long sheet (e.g. New Meal
-     with the barcode scanner open) scrolls its body instead of reaching
-     off the top of the screen. */
+     inset plus a generous fixed buffer (iOS doesn't grow the safe-area
+     inset for the screen-recording indicator, so the inset alone isn't
+     enough clearance), so a long sheet (e.g. New Meal with the barcode
+     scanner open) scrolls its body instead of reaching off the top of
+     the screen. */
   background: var(--bg); width: 100%; max-width: 520px;
-  max-height: min(92vh, calc(100vh - env(safe-area-inset-top) - 16px));
+  max-height: min(88vh, calc(100vh - env(safe-area-inset-top) - 56px));
   border-radius: 18px 18px 0 0; border: 1px solid var(--border); border-bottom: none;
   display: flex; flex-direction: column; overflow: hidden;
   padding-bottom: env(safe-area-inset-bottom);
