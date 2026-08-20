@@ -189,11 +189,10 @@ h1 { color: var(--text); font-size: 19px; font-weight: 600; margin: 0; letter-sp
 .totals-row-secondary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 16px; }
 .total-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 10px 8px; display: flex; flex-direction: column; gap: 3px; }
 .total-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
-.total-value { color: var(--text); font-size: 16.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.total-value.accent { color: var(--accent); }
-.total-value.under-goal { color: var(--protein); }
-.total-value.over-goal { color: var(--red); }
+.total-value { display: block; color: var(--text); font-size: 16.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.total-goal { display: block; color: var(--muted); font-size: 10.5px; font-weight: 500; min-height: 13px; }
 .total-unit { color: var(--muted); font-size: 10.5px; font-weight: 400; }
+.total-card.accent .total-value { color: var(--accent); }
 .total-card.protein .total-value { color: var(--protein); }
 .total-card.carbs .total-value { color: var(--carbs); }
 .total-card.fat .total-value { color: var(--fat); }

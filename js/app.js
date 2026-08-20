@@ -245,10 +245,26 @@ function renderSheetRoot() {
 // Log view
 // ============================================================================
 
+// Always renders the track, even with no goal (0% fill) — so a tile
+// without a goal set is still the same height as one that has it.
 function renderProgressBar(current, goal, colorClass) {
-  if (!goal || goal <= 0) return "";
-  const pct = clamp((current / goal) * 100, 0, 100);
+  const pct = goal && goal > 0 ? clamp((current / goal) * 100, 0, 100) : 0;
   return `<div class="progress-track"><div class="progress-fill ${colorClass}" style="width:${pct}%"></div></div>`;
+}
+
+// Shared renderer for every metric tile on the Log view (Calories,
+// Protein, Carbs, Fat, Fiber, Sugar, Sat Fat, Sodium) so they're
+// structurally identical — same label/value/goal-line/progress-bar layout
+// regardless of whether that particular metric has a goal configured.
+function renderMetricTile(label, value, goal, colorClass) {
+  return `
+    <div class="total-card ${colorClass}">
+      <span class="total-label">${label}</span>
+      <span class="total-value">${fmtNum(value)}</span>
+      <span class="total-goal">${goal ? `/${fmtNum(goal)}` : "&nbsp;"}</span>
+      ${renderProgressBar(value, goal, colorClass)}
+    </div>
+  `;
 }
 
 // Shared under/over color class for any calorie total compared against a
@@ -371,49 +387,17 @@ function renderLogView() {
     </div>
 
     <div class="totals-row">
-      <div class="total-card">
-        <span class="total-label">Calories</span>
-        <span class="total-value accent">${fmtNum(totals.calories)}${goals.calories ? `<span class="total-unit"> /${fmtNum(goals.calories)}</span>` : ""}</span>
-        ${renderProgressBar(totals.calories, goals.calories, "")}
-      </div>
-      <div class="total-card protein">
-        <span class="total-label">Protein</span>
-        <span class="total-value">${fmtNum(totals.protein)}<span class="total-unit">g${goals.protein ? `/${fmtNum(goals.protein)}g` : ""}</span></span>
-        ${renderProgressBar(totals.protein, goals.protein, "protein")}
-      </div>
-      <div class="total-card carbs">
-        <span class="total-label">Carbs</span>
-        <span class="total-value">${fmtNum(totals.carbs)}<span class="total-unit">g${goals.carbs ? `/${fmtNum(goals.carbs)}g` : ""}</span></span>
-        ${renderProgressBar(totals.carbs, goals.carbs, "carbs")}
-      </div>
-      <div class="total-card fat">
-        <span class="total-label">Fat</span>
-        <span class="total-value">${fmtNum(totals.fat)}<span class="total-unit">g${goals.fat ? `/${fmtNum(goals.fat)}g` : ""}</span></span>
-        ${renderProgressBar(totals.fat, goals.fat, "fat")}
-      </div>
+      ${renderMetricTile("Calories", totals.calories, goals.calories, "accent")}
+      ${renderMetricTile("Protein", totals.protein, goals.protein, "protein")}
+      ${renderMetricTile("Carbs", totals.carbs, goals.carbs, "carbs")}
+      ${renderMetricTile("Fat", totals.fat, goals.fat, "fat")}
     </div>
 
     <div class="totals-row-secondary">
-      <div class="total-card fiber">
-        <span class="total-label">Fiber</span>
-        <span class="total-value">${fmtNum(totals.fiber)}<span class="total-unit">g${goals.fiber ? `/${fmtNum(goals.fiber)}g` : ""}</span></span>
-        ${renderProgressBar(totals.fiber, goals.fiber, "fiber")}
-      </div>
-      <div class="total-card sugar">
-        <span class="total-label">Sugar</span>
-        <span class="total-value">${fmtNum(totals.sugar)}<span class="total-unit">g${goals.sugar ? `/${fmtNum(goals.sugar)}g` : ""}</span></span>
-        ${renderProgressBar(totals.sugar, goals.sugar, "sugar")}
-      </div>
-      <div class="total-card sat-fat">
-        <span class="total-label">Sat Fat</span>
-        <span class="total-value">${fmtNum(totals.satFat)}<span class="total-unit">g${goals.satFat ? `/${fmtNum(goals.satFat)}g` : ""}</span></span>
-        ${renderProgressBar(totals.satFat, goals.satFat, "sat-fat")}
-      </div>
-      <div class="total-card sodium">
-        <span class="total-label">Sodium</span>
-        <span class="total-value">${fmtNum(totals.sodium)}<span class="total-unit">mg${goals.sodium ? `/${fmtNum(goals.sodium)}mg` : ""}</span></span>
-        ${renderProgressBar(totals.sodium, goals.sodium, "sodium")}
-      </div>
+      ${renderMetricTile("Fiber", totals.fiber, goals.fiber, "fiber")}
+      ${renderMetricTile("Sugar", totals.sugar, goals.sugar, "sugar")}
+      ${renderMetricTile("Sat Fat", totals.satFat, goals.satFat, "sat-fat")}
+      ${renderMetricTile("Sodium", totals.sodium, goals.sodium, "sodium")}
     </div>
 
     ${renderWaterCard()}
