@@ -1,5 +1,5 @@
 // Bump this version string whenever app files change, so clients pick up the update.
-const CACHE_NAME = "calorie-tracker-v26";
+const CACHE_NAME = "calorie-tracker-v27";
 
 const PRECACHE_URLS = [
   "./",

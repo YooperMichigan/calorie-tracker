@@ -140,6 +140,33 @@ function sumWater(water) {
   return water.reduce((s, w) => s + (w.amount || 0), 0);
 }
 
+// Aggregates supplement nutrients across a set of entries, grouped by
+// name+unit (not just name) — e.g. Vitamin D reported in IU on one label
+// and mcg on another can't be summed together without a conversion, so
+// they're kept as separate rows rather than silently mixed.
+function sumSupplementNutrients(entries) {
+  const map = new Map();
+  entries.forEach((e) => {
+    (e.nutrients || []).forEach((n) => {
+      const name = (n.name || "").trim();
+      if (!name) return;
+      const unit = (n.unit || "").trim();
+      const key = `${name.toLowerCase()}|${unit.toLowerCase()}`;
+      if (!map.has(key)) map.set(key, { name, unit, amount: 0 });
+      map.get(key).amount += parseFloat(n.amount) || 0;
+    });
+  });
+  return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// Compact free-text meta line for a supplement row: "1 tablet · 12 nutrients".
+function supplementMetaLabel(s) {
+  const parts = [];
+  if (s.dose) parts.push(s.dose);
+  if (s.nutrients && s.nutrients.length) parts.push(`${s.nutrients.length} nutrient${s.nutrients.length === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
+
 async function refreshWeeklyData() {
   const range = weekRangeFor(state.weekAnchor);
   const [all, water] = await Promise.all([
@@ -222,7 +249,7 @@ async function refreshSupplementsData() {
     items: byDate.get(date).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
   }));
 
-  state.supplementsData = { range, days, total: all.length };
+  state.supplementsData = { range, days, total: all.length, all };
 }
 
 // ============================================================================
@@ -438,6 +465,8 @@ function renderLogView() {
     ${mealSections}
 
     ${renderSupplementsSection()}
+
+    ${renderSupplementNutrientsCard(state.supplements, "Today's Supplement Nutrients")}
   `;
 }
 
@@ -461,12 +490,33 @@ function renderSupplementsSection() {
   `;
 }
 
+// Shared by the Log page (today's entries) and the Supplements summary tab
+// (a whole month's entries) — same aggregation, different entry set.
+function renderSupplementNutrientsCard(entries, title) {
+  const totals = sumSupplementNutrients(entries);
+  if (!totals.length) return "";
+  return `
+    <div class="chart-card">
+      <div class="chart-title">${escapeHtml(title)}</div>
+      <div class="nutrient-list">
+        ${totals.map((n) => `
+          <div class="nutrient-row">
+            <span class="nutrient-name">${escapeHtml(n.name)}</span>
+            <span class="nutrient-amount">${fmtNum(n.amount, 2)}${n.unit ? " " + escapeHtml(n.unit) : ""}</span>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderSupplementRow(s) {
+  const meta = supplementMetaLabel(s);
   return `
     <div class="entry-row">
       <div class="entry-main">
         <div class="entry-name">${escapeHtml(s.name)}</div>
-        ${s.dose ? `<div class="entry-meta"><span>${escapeHtml(s.dose)}</span></div>` : ""}
+        ${meta ? `<div class="entry-meta"><span>${escapeHtml(meta)}</span></div>` : ""}
       </div>
       <button class="entry-del" data-action="delete-supplement" data-id="${s.id}" aria-label="Delete">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
@@ -734,7 +784,7 @@ function renderSupplementsSummary() {
           <div class="entry-row">
             <div class="entry-main">
               <div class="entry-name">${escapeHtml(s.name)}</div>
-              ${s.dose ? `<div class="entry-meta"><span>${escapeHtml(s.dose)}</span></div>` : ""}
+              ${supplementMetaLabel(s) ? `<div class="entry-meta"><span>${escapeHtml(supplementMetaLabel(s))}</span></div>` : ""}
             </div>
           </div>
         `).join("")}
@@ -761,6 +811,8 @@ function renderSupplementsSummary() {
         <div class="summary-card-sub">${d.days.length} day${d.days.length === 1 ? "" : "s"} with entries</div>
       </div>
     </div>
+
+    ${renderSupplementNutrientsCard(d.all, "Nutrient Totals This Month")}
 
     ${dayGroups}
   `;
@@ -1067,28 +1119,10 @@ function renderSupplementScanTab(s) {
   }
 
   if (s.product) {
-    if (!s.product.found) {
-      return `
-        <div class="scan-status">No match found for barcode ${escapeHtml(s.product.barcode)}.</div>
-        <button class="btn btn-primary btn-block" data-action="supp-manual-from-scan">Enter Manually</button>
-        <button class="link-btn" data-action="supp-rescan" style="display:block; text-align:center; margin-top:10px;">Scan again</button>
-      `;
-    }
     const p = s.product;
     return `
-      <div class="product-card">
-        <div class="product-name">${escapeHtml(p.name)}</div>
-        ${p.brand ? `<div class="product-brand">${escapeHtml(p.brand)}</div>` : ""}
-        <div class="field-wrap" style="margin-top:10px;">
-          <span class="field-label">Dose</span>
-          <input type="text" id="suppScanDose" placeholder="e.g. 2000 IU, 2 capsules" value="${escapeHtml(p.dose || "")}">
-        </div>
-      </div>
-      <div class="checkbox-row fav-checkbox-hint">
-        <input type="checkbox" id="suppScanSaveFav" ${s.saveFav ? "checked" : ""}>
-        <label for="suppScanSaveFav">Save for quick re-add</label>
-      </div>
-      <button class="btn btn-primary btn-block" data-action="confirm-scan-add-supplement">Add Supplement</button>
+      <div class="scan-status">${p.found ? `Found: ${escapeHtml(p.name)}` : `No match found for barcode ${escapeHtml(p.barcode)}.`}</div>
+      <button class="btn btn-primary btn-block" data-action="supp-manual-from-scan">${p.found ? "Continue to Details" : "Enter Manually"}</button>
       <button class="link-btn" data-action="supp-rescan" style="display:block; text-align:center; margin-top:10px;">Scan a different item</button>
     `;
   }
@@ -1101,6 +1135,28 @@ function renderSupplementScanTab(s) {
   `;
 }
 
+// Dynamic, freeform nutrient rows — supplements vary too much (a multivitamin
+// might list 20 vitamins/minerals, a creatine tub lists one) to fit the fixed
+// macro-column layout food entries use, so each row is just Name/Amount/Unit,
+// added and removed on demand.
+function renderNutrientRows(nutrients) {
+  const rows = (nutrients || []).map((n, i) => `
+    <div class="nutrient-input-row">
+      <input type="text" name="nutrientName" placeholder="Name (e.g. Vitamin D)" value="${escapeHtml(n.name || "")}">
+      <input type="number" name="nutrientAmount" step="any" min="0" placeholder="Amount" value="${n.amount !== undefined && n.amount !== null ? escapeHtml(String(n.amount)) : ""}">
+      <input type="text" name="nutrientUnit" placeholder="Unit" value="${escapeHtml(n.unit || "")}">
+      <button type="button" class="nutrient-row-del" data-action="supp-remove-nutrient-row" data-index="${i}" aria-label="Remove nutrient">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  `).join("");
+  return `
+    <div class="field-label" style="margin:12px 0 6px;">Nutrients (optional — from the label's Supplement Facts)</div>
+    <div class="nutrient-input-list">${rows}</div>
+    <button type="button" class="link-btn" data-action="supp-add-nutrient-row">+ Add nutrient</button>
+  `;
+}
+
 function renderSupplementManualTab(s) {
   const m = s.manual;
   return `
@@ -1110,10 +1166,11 @@ function renderSupplementManualTab(s) {
         <input type="text" name="name" placeholder="e.g. Vitamin D3" value="${escapeHtml(m.name)}" required>
       </div>
       <div class="field-wrap">
-        <span class="field-label">Dose (optional)</span>
-        <input type="text" name="dose" placeholder="e.g. 2000 IU, 2 capsules" value="${escapeHtml(m.dose)}">
+        <span class="field-label">Serving size (optional)</span>
+        <input type="text" name="dose" placeholder="e.g. 1 tablet, 2 softgels" value="${escapeHtml(m.dose)}">
       </div>
-      <div class="checkbox-row">
+      ${renderNutrientRows(m.nutrients)}
+      <div class="checkbox-row" style="margin-top:14px;">
         <input type="checkbox" id="suppManualSaveFav" ${s.saveFav ? "checked" : ""}>
         <label for="suppManualSaveFav">Save for quick re-add</label>
       </div>
@@ -1128,7 +1185,7 @@ function renderSupplementSavedTab(s) {
     <div class="fav-row" data-action="log-saved-supplement" data-id="${sup.id}">
       <div class="fav-main">
         <div class="fav-name">${escapeHtml(sup.name)}</div>
-        ${sup.dose ? `<div class="fav-meta">${escapeHtml(sup.dose)}</div>` : ""}
+        ${supplementMetaLabel(sup) ? `<div class="fav-meta">${escapeHtml(supplementMetaLabel(sup))}</div>` : ""}
       </div>
       <div class="fav-actions">
         <button class="fav-icon-btn" data-action="delete-saved-supplement" data-id="${sup.id}" aria-label="Remove">
@@ -1493,6 +1550,37 @@ function newManualSearchState() {
   return { query: "", results: [], loading: false, error: null, searched: false };
 }
 
+// Reads the currently-typed name/dose/nutrient-row values out of the open
+// supplement form back into state, before an add/remove-row re-render would
+// otherwise wipe them (innerHTML replacement doesn't preserve input values).
+function syncSupplementFormIntoState() {
+  const form = document.getElementById("supplementManualForm");
+  if (!form) return;
+  const fd = new FormData(form);
+  const m = state.sheet.manual;
+  m.name = fd.get("name") || m.name;
+  m.dose = fd.get("dose") || "";
+  m.nutrients = zipNutrientRows(fd);
+}
+
+// Reconstructs the nutrient-row array from same-named repeated form fields
+// (nutrientName/nutrientAmount/nutrientUnit) — FormData.getAll preserves DOM
+// order, so no index bookkeeping is needed on the input names themselves.
+function zipNutrientRows(fd) {
+  const names = fd.getAll("nutrientName");
+  const amounts = fd.getAll("nutrientAmount");
+  const units = fd.getAll("nutrientUnit");
+  return names.map((name, i) => ({ name, amount: amounts[i], unit: units[i] }));
+}
+
+// Submit-time version of zipNutrientRows: trims/parses and drops any row
+// missing a name or a valid amount, rather than preserving it verbatim.
+function parseNutrientRows(fd) {
+  return zipNutrientRows(fd)
+    .map((n) => ({ name: (n.name || "").trim(), amount: parseFloat(n.amount), unit: (n.unit || "").trim() }))
+    .filter((n) => n.name && !isNaN(n.amount));
+}
+
 async function closeSheet() {
   await BarcodeScanner.stop();
   state.sheet = null;
@@ -1641,7 +1729,7 @@ async function handleAction(action, ds, el) {
 
     // ---- supplements ----
     case "open-add-supplement-sheet":
-      state.sheet = { type: "add-supplement", tab: "scan", product: null, lookupLoading: false, scanError: null, saveFav: false, manual: { name: "", dose: "" } };
+      state.sheet = { type: "add-supplement", tab: "scan", product: null, lookupLoading: false, scanError: null, saveFav: false, manual: { name: "", dose: "", nutrients: [] } };
       renderSheetRoot();
       break;
     case "supp-sheet-tab":
@@ -1655,32 +1743,28 @@ async function handleAction(action, ds, el) {
       renderSheetRoot();
       break;
     case "supp-manual-from-scan": {
-      const barcode = state.sheet.product && state.sheet.product.barcode;
+      const p = state.sheet.product;
       state.sheet.tab = "manual";
-      state.sheet.manual = { name: "", dose: "" };
-      state.sheet.scannedBarcode = barcode || null;
+      state.sheet.manual = { name: (p && p.found && p.name) || "", dose: (p && p.found && p.dose) || "", nutrients: [] };
+      state.sheet.scannedBarcode = (p && p.barcode) || null;
       renderSheetRoot();
       break;
     }
-    case "confirm-scan-add-supplement": {
-      const s = state.sheet;
-      const p = s.product;
-      const dose = document.getElementById("suppScanDose")?.value.trim() || "";
-      const saveFav = !!document.getElementById("suppScanSaveFav")?.checked;
-      const supplement = { id: uuid(), date: state.logDate, name: p.name, dose, brand: p.brand || "", barcode: p.barcode, source: "barcode", createdAt: Date.now() };
-      await dbAddSupplement(supplement);
-      if (saveFav) await dbAddSavedSupplement({ id: uuid(), name: supplement.name, dose: supplement.dose, brand: supplement.brand, barcode: supplement.barcode, createdAt: Date.now() });
-      await refreshSupplements();
-      if (saveFav) await refreshSavedSupplements();
-      await closeSheet();
-      renderMain();
-      showToast("Supplement added", "success");
+    case "supp-add-nutrient-row":
+      syncSupplementFormIntoState();
+      state.sheet.manual.nutrients.push({ name: "", amount: "", unit: "" });
+      renderSheetRoot();
       break;
-    }
+    case "supp-remove-nutrient-row":
+      syncSupplementFormIntoState();
+      state.sheet.manual.nutrients.splice(parseInt(ds.index, 10), 1);
+      renderSheetRoot();
+      break;
     case "log-saved-supplement": {
       const sup = state.savedSupplements.find((x) => x.id === ds.id);
       if (sup) {
-        await dbAddSupplement({ id: uuid(), date: state.logDate, name: sup.name, dose: sup.dose || "", brand: sup.brand || "", barcode: sup.barcode || null, source: "saved", createdAt: Date.now() });
+        const nutrients = Array.isArray(sup.nutrients) ? JSON.parse(JSON.stringify(sup.nutrients)) : [];
+        await dbAddSupplement({ id: uuid(), date: state.logDate, name: sup.name, dose: sup.dose || "", nutrients, brand: sup.brand || "", barcode: sup.barcode || null, source: "saved", createdAt: Date.now() });
         await refreshSupplements();
         await closeSheet();
         renderMain();
@@ -1980,10 +2064,11 @@ function attachGlobalListeners() {
       const s = state.sheet;
       const name = fd.get("name").trim();
       const dose = fd.get("dose").trim();
+      const nutrients = parseNutrientRows(fd);
       const saveFav = !!document.getElementById("suppManualSaveFav")?.checked;
       const barcode = s.scannedBarcode || null;
-      await dbAddSupplement({ id: uuid(), date: state.logDate, name, dose, brand: "", barcode, source: "manual", createdAt: Date.now() });
-      if (saveFav) await dbAddSavedSupplement({ id: uuid(), name, dose, brand: "", barcode, createdAt: Date.now() });
+      await dbAddSupplement({ id: uuid(), date: state.logDate, name, dose, nutrients, brand: "", barcode, source: "manual", createdAt: Date.now() });
+      if (saveFav) await dbAddSavedSupplement({ id: uuid(), name, dose, nutrients, brand: "", barcode, createdAt: Date.now() });
       await refreshSupplements();
       if (saveFav) await refreshSavedSupplements();
       await closeSheet();

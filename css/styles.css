@@ -409,6 +409,17 @@ svg text { font-family: -apple-system, sans-serif; }
 .water-row-del { background: none; border: none; color: var(--muted-2); cursor: pointer; padding: 4px; display: flex; }
 .water-row-del:active { opacity: 0.6; }
 
+/* ---------- supplement nutrient rows ---------- */
+.nutrient-input-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 8px; }
+.nutrient-input-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 6px; align-items: center; }
+.nutrient-row-del { background: none; border: none; color: var(--muted-2); cursor: pointer; padding: 6px; display: flex; align-items: center; justify-content: center; }
+.nutrient-row-del:active { opacity: 0.6; }
+.nutrient-list { display: flex; flex-direction: column; gap: 6px; }
+.nutrient-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.nutrient-row:last-child { border-bottom: none; }
+.nutrient-name { font-size: 13px; color: var(--text); }
+.nutrient-amount { font-size: 13px; color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
 /* ---------- goals / progress ---------- */
 .progress-track { background: var(--card-2); border-radius: 999px; height: 5px; overflow: hidden; margin-top: 6px; }
 .progress-fill { height: 100%; border-radius: 999px; background: var(--accent); transition: width 0.2s; }
