@@ -411,7 +411,7 @@ function renderLogView() {
 
   const mealSections = MEAL_ORDER.map((meal) => {
     const mealEntries = state.entries.filter((e) => e.meal === meal);
-    const mealKcal = sumTotals(mealEntries).calories;
+    const mealTotals = sumTotals(mealEntries);
     const rows = mealEntries.length
       ? mealEntries.map(renderEntryRow).join("")
       : `<div class="empty-meal">Nothing logged yet</div>`;
@@ -420,7 +420,9 @@ function renderLogView() {
         <div class="meal-header">
           <div class="meal-title-wrap">
             <span class="meal-title">${MEAL_LABELS[meal]}</span>
-            <span class="meal-kcal">${fmtNum(mealKcal)} kcal</span>
+            <span class="meal-kcal">${fmtNum(mealTotals.calories)} kcal</span>
+            <span class="meal-kcal meal-macro-p">P ${fmtNum(mealTotals.protein)}g</span>
+            <span class="meal-kcal meal-macro-fi">Fi ${fmtNum(mealTotals.fiber)}g</span>
           </div>
           <button class="add-btn" data-action="open-add-sheet" data-meal="${meal}" aria-label="Add to ${MEAL_LABELS[meal]}">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
