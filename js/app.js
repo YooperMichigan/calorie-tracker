@@ -625,8 +625,13 @@ function renderMonthlySummary() {
     </div>
 
     <div class="chart-card">
-      <div class="chart-title"><span class="accent">Daily Calorie</span> - <span class="water">Water</span> Trend</div>
-      ${d.monthTotal.calories > 0 || d.monthWater > 0 ? svgDualLineChart(calorieData, waterData) : `<div class="chart-empty">No entries logged this month</div>`}
+      <div class="chart-title"><span class="accent">Daily Calorie Trend</span></div>
+      ${d.monthTotal.calories > 0 ? svgLineChart(calorieData, { color: C.accent }) : `<div class="chart-empty">No entries logged this month</div>`}
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-title"><span class="water">Daily Water Trend</span></div>
+      ${d.monthWater > 0 ? svgLineChart(waterData, { color: C.water }) : `<div class="chart-empty">No entries logged this month</div>`}
     </div>
 
     <div class="chart-card" style="display:flex; flex-direction:column; align-items:center;">
