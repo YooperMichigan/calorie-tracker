@@ -12,11 +12,25 @@ async function exportBackup() {
     goals: getGoals(),
   };
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const filename = `calorie-tracker-backup-${todayISO()}.json`;
+
+  // Prefer the native share sheet (lets you AirDrop, save to Files, etc.)
+  // over a plain download link, which on iOS Safari just opens the JSON in
+  // an in-browser document viewer instead of doing anything useful.
+  try {
+    const file = new File([blob], filename, { type: "application/json" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename });
+      return { entryCount: entries.length, favoriteCount: favorites.length, waterCount: water.length };
+    }
+  } catch (e) {
+    // user cancelled the share sheet or it failed silently — fall through to download
+  }
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  const stamp = todayISO();
   a.href = url;
-  a.download = `calorie-tracker-backup-${stamp}.json`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
