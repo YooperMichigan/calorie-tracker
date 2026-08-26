@@ -55,9 +55,9 @@ function formatDateRelative(iso) {
 // Monday-start week containing `iso`. Returns { start, end, days: [7 iso strings] }.
 function weekRangeFor(iso) {
   const d = parseISO(iso);
-  const dow = d.getDay(); // 0=Sun..6=Sat
-  const diffToMonday = dow === 0 ? -6 : 1 - dow;
-  const start = isoDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday));
+  const dow = d.getDay(); // 0=Sun..6=Sat — week runs Sunday through Saturday.
+  const diffToSunday = -dow;
+  const start = isoDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToSunday));
   const days = [];
   for (let i = 0; i < 7; i++) days.push(addDays(start, i));
   return { start, end: days[6], days };
