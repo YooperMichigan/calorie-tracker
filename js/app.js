@@ -21,6 +21,11 @@ const state = {
   monthlyData: null,
   supplementsData: null,
 
+  // Copied food item (from a logged entry or a saved-meal item), ready to
+  // paste into any meal on any day — cleared only by copying something
+  // else, not by a single paste, so the same item can be pasted repeatedly.
+  clipboard: null,
+
   sheet: null,                 // current open sheet descriptor, or null
 };
 
@@ -109,6 +114,18 @@ function sumTotals(entries) {
     acc.sodium += e.sodium || 0;
     return acc;
   }, { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, satFat: 0, sodium: 0 });
+}
+
+// Extracts the reusable food data from either a log entry or a saved-meal
+// item into a clipboard-shaped object — no id/date/meal/createdAt, since
+// those get regenerated fresh at paste time.
+function clipboardFromFoodItem(item) {
+  return {
+    name: item.name, quantity: item.quantity, unit: item.unit,
+    calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat,
+    fiber: item.fiber, sugar: item.sugar, satFat: item.satFat, sodium: item.sodium,
+    perUnit: item.perUnit || null, source: item.source || "copied", barcode: item.barcode || null,
+  };
 }
 
 async function refreshEntries() {
@@ -424,9 +441,16 @@ function renderLogView() {
             <span class="meal-kcal meal-macro-p">P ${fmtNum(mealTotals.protein)}g</span>
             <span class="meal-kcal meal-macro-fi">Fi ${fmtNum(mealTotals.fiber)}g</span>
           </div>
-          <button class="add-btn" data-action="open-add-sheet" data-meal="${meal}" aria-label="Add to ${MEAL_LABELS[meal]}">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          </button>
+          <div class="meal-header-actions">
+            ${state.clipboard ? `
+              <button class="add-btn paste-btn" data-action="paste-entry" data-meal="${meal}" aria-label="Paste &quot;${escapeHtml(state.clipboard.name)}&quot; into ${MEAL_LABELS[meal]}">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="4" width="10" height="14" rx="1.5"/><path d="M8 8H6a1.5 1.5 0 0 0-1.5 1.5v9A1.5 1.5 0 0 0 6 20h8a1.5 1.5 0 0 0 1.5-1.5V18"/></svg>
+              </button>
+            ` : ""}
+            <button class="add-btn" data-action="open-add-sheet" data-meal="${meal}" aria-label="Add to ${MEAL_LABELS[meal]}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
         </div>
         <div class="entry-list">${rows}</div>
       </section>
@@ -540,6 +564,9 @@ function renderEntryRow(e) {
         </div>
       </div>
       <div class="entry-kcal">${fmtNum(e.calories)}</div>
+      <button class="entry-del entry-copy" data-action="copy-entry" data-id="${e.id}" aria-label="Copy">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>
+      </button>
       <button class="entry-del" data-action="delete-entry" data-id="${e.id}" aria-label="Delete">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/></svg>
       </button>
@@ -678,7 +705,7 @@ function renderWeeklySummary() {
 
     <div class="chart-card">
       <div class="chart-title"><span class="accent">Daily Calories</span> - <span class="water">Water</span></div>
-      ${d.weekTotal.calories > 0 || d.weekWater > 0 ? svgDualBarChart(calorieData, waterData) : `<div class="chart-empty">No entries logged this week</div>`}
+      ${d.weekTotal.calories > 0 || d.weekWater > 0 ? svgDualBarChart(calorieData, waterData, { goalA: goals.calories, goalB: goals.water }) : `<div class="chart-empty">No entries logged this week</div>`}
     </div>
 
     <div class="chart-card" style="display:flex; flex-direction:column; align-items:center;">
@@ -752,12 +779,12 @@ function renderMonthlySummary() {
 
     <div class="chart-card">
       <div class="chart-title"><span class="accent">Daily Calorie Trend</span></div>
-      ${d.monthTotal.calories > 0 ? svgLineChart(calorieData, { color: C.accent }) : `<div class="chart-empty">No entries logged this month</div>`}
+      ${d.monthTotal.calories > 0 ? svgLineChart(calorieData, { color: C.accent, goal: goals.calories }) : `<div class="chart-empty">No entries logged this month</div>`}
     </div>
 
     <div class="chart-card">
       <div class="chart-title"><span class="water">Daily Water Trend</span></div>
-      ${d.monthWater > 0 ? svgLineChart(waterData, { color: C.water }) : `<div class="chart-empty">No entries logged this month</div>`}
+      ${d.monthWater > 0 ? svgLineChart(waterData, { color: C.water, goal: goals.water }) : `<div class="chart-empty">No entries logged this month</div>`}
     </div>
 
     <div class="chart-card" style="display:flex; flex-direction:column; align-items:center;">
@@ -1256,9 +1283,14 @@ function renderFavoriteBuilderSheet(s) {
         <div class="fav-item-name">${escapeHtml(it.name)}</div>
         <div class="fav-item-kcal">${fmtNum(it.quantity, 2)} × ${escapeHtml(it.unit)} · ${fmtNum(it.calories)} kcal</div>
       </div>
-      <button class="fav-item-del" data-action="remove-fav-item" data-index="${i}" aria-label="Remove">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
+      <div class="fav-item-actions">
+        <button class="fav-item-del" data-action="copy-fav-item" data-index="${i}" aria-label="Copy">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>
+        </button>
+        <button class="fav-item-del" data-action="remove-fav-item" data-index="${i}" aria-label="Remove">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
     </div>
   `).join("") : `<div class="empty-meal" style="margin-bottom:10px;">No items added yet.</div>`;
 
@@ -1706,6 +1738,26 @@ async function handleAction(action, ds, el) {
       showToast("Entry deleted", "success");
       break;
     }
+    case "copy-entry": {
+      const entry = state.entries.find((e) => e.id === ds.id);
+      if (entry) {
+        state.clipboard = clipboardFromFoodItem(entry);
+        renderMain();
+        showToast(`Copied "${entry.name}" — tap paste on any meal`, "success");
+      }
+      break;
+    }
+    case "paste-entry": {
+      const c = state.clipboard;
+      if (c) {
+        const entry = { id: uuid(), date: state.logDate, meal: ds.meal, ...c, createdAt: Date.now() };
+        await dbAddEntry(entry);
+        await refreshEntries();
+        renderMain();
+        showToast(`Pasted "${c.name}" into ${MEAL_LABELS[ds.meal]}`, "success");
+      }
+      break;
+    }
 
     // ---- water ----
     case "water-quick-add": {
@@ -1852,6 +1904,14 @@ async function handleAction(action, ds, el) {
       state.sheet.items.splice(parseInt(ds.index, 10), 1);
       renderSheetRoot();
       break;
+    case "copy-fav-item": {
+      const it = state.sheet.items[parseInt(ds.index, 10)];
+      if (it) {
+        state.clipboard = clipboardFromFoodItem(it);
+        showToast(`Copied "${it.name}" — tap paste on any meal`, "success");
+      }
+      break;
+    }
     case "save-favorite": {
       const s = state.sheet;
       const nameInput = document.getElementById("favNameInput");

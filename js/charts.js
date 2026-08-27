@@ -58,13 +58,29 @@ function svgBarChart(data, opts = {}) {
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${bars}</svg>`;
 }
 
+// A dashed reference line at a target value, with a small label — used to
+// mark a daily goal on a bar/line chart so it reads at a glance whether a
+// given day was over or under. `anchor` picks which end of the chart the
+// label sits at, so two goal lines in the same chart (svgDualBarChart)
+// don't draw their labels on top of each other.
+function goalLineSvg(value, max, pad, width, chartH, color, label, anchor = "end") {
+  if (!value || value <= 0) return "";
+  const y = pad.top + chartH - Math.min(1, value / max) * chartH;
+  const x = anchor === "end" ? width - pad.right : pad.left;
+  return `
+    <line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${width - pad.right}" y2="${y.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-dasharray="5 3" opacity="0.85"/>
+    <text x="${x.toFixed(1)}" y="${(y - 3).toFixed(1)}" text-anchor="${anchor}" font-size="8.5" fill="${color}">${escapeHtml(label)}</text>
+  `;
+}
+
 function svgLineChart(data, opts = {}) {
   const C = getChartColors();
   const width = opts.width || 320, height = opts.height || 170;
   const pad = { top: 16, right: 10, bottom: 22, left: 10 };
   const chartW = width - pad.left - pad.right;
   const chartH = height - pad.top - pad.bottom;
-  const max = Math.max(1, ...data.map((d) => d.value)) * 1.15;
+  const goal = opts.goal || 0;
+  const max = Math.max(1, ...data.map((d) => d.value), goal) * 1.15;
   const n = data.length;
   const stepX = n > 1 ? chartW / (n - 1) : 0;
   const color = opts.color || C.accent;
@@ -73,6 +89,8 @@ function svgLineChart(data, opts = {}) {
     const y = pad.top + chartH * (1 - f);
     return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="${C.grid}" stroke-width="1"/>`;
   }).join("");
+
+  const goalLine = goalLineSvg(goal, max, pad, width, chartH, color, "Goal");
 
   const points = data.map((d, i) => {
     const x = pad.left + i * stepX;
@@ -94,6 +112,7 @@ function svgLineChart(data, opts = {}) {
 
   return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="xMidYMid meet">
     ${gridLines}
+    ${goalLine}
     <path d="${areaPath}" fill="${color}" fill-opacity="0.12" stroke="none"/>
     <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     ${dots}
@@ -112,8 +131,10 @@ function svgDualBarChart(dataA, dataB, opts = {}) {
   const chartW = width - pad.left - pad.right;
   const chartH = height - pad.top - pad.bottom;
   const n = dataA.length;
-  const maxA = Math.max(1, ...dataA.map((d) => d.value)) * 1.2;
-  const maxB = Math.max(1, ...dataB.map((d) => d.value)) * 1.2;
+  const goalA = opts.goalA || 0;
+  const goalB = opts.goalB || 0;
+  const maxA = Math.max(1, ...dataA.map((d) => d.value), goalA) * 1.2;
+  const maxB = Math.max(1, ...dataB.map((d) => d.value), goalB) * 1.2;
   const slot = chartW / n;
   const barW = Math.min(16, slot * 0.28);
   const gap = 3;
@@ -124,6 +145,12 @@ function svgDualBarChart(dataA, dataB, opts = {}) {
     const y = pad.top + chartH * (1 - f);
     return `<line x1="${pad.left}" y1="${y}" x2="${width - pad.right}" y2="${y}" stroke="${C.grid}" stroke-width="1"/>`;
   }).join("");
+
+  // Calorie goal label anchors right, water goal label anchors left, so the
+  // two reference lines don't draw their text on top of each other when
+  // they land close together.
+  const goalLines = goalLineSvg(goalA, maxA, pad, width, chartH, colorA, "Cal Goal", "end")
+    + goalLineSvg(goalB, maxB, pad, width, chartH, colorB, "Water Goal", "start");
 
   const bars = dataA.map((d, i) => {
     const bVal = dataB[i] ? dataB[i].value : 0;
@@ -142,7 +169,7 @@ function svgDualBarChart(dataA, dataB, opts = {}) {
     `;
   }).join("");
 
-  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${bars}</svg>`;
+  return `<svg viewBox="0 0 ${width} ${height}" width="100%" height="${height}" preserveAspectRatio="xMidYMid meet">${gridLines}${goalLines}${bars}</svg>`;
 }
 
 function svgDonutChart(segments, opts = {}) {
