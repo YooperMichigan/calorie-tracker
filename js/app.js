@@ -564,6 +564,9 @@ function renderEntryRow(e) {
         </div>
       </div>
       <div class="entry-kcal">${fmtNum(e.calories)}</div>
+      <button class="entry-del entry-edit" data-action="edit-entry" data-id="${e.id}" aria-label="Edit">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+      </button>
       <button class="entry-del entry-copy" data-action="copy-entry" data-id="${e.id}" aria-label="Copy">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="12" height="12" rx="1.5"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4H5.5A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/></svg>
       </button>
