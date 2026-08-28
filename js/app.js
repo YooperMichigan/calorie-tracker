@@ -1257,8 +1257,8 @@ function renderEditEntrySheet(s) {
           <input type="text" name="unit" value="${escapeHtml(e.unit || "")}" required>
         </div>
       </div>
-      ${canRescale ? `<div class="scan-hint" style="text-align:left; margin:-2px 0 10px;">Nutrition values below scale automatically with quantity for scanned items.</div>` : ""}
-      ${renderNutritionInputs(e, { readonly: canRescale })}
+      ${canRescale ? `<div class="scan-hint" style="text-align:left; margin:-2px 0 10px;">Nutrition values below update automatically when you change quantity — edit any of them directly to override.</div>` : ""}
+      ${renderNutritionInputs(e)}
       <button type="submit" class="btn btn-primary btn-block" style="margin-bottom:8px;">Save Changes</button>
       <button type="button" class="btn btn-danger btn-block" data-action="delete-entry" data-id="${e.id}">Delete Entry</button>
     </form>
@@ -2148,19 +2148,12 @@ function attachGlobalListeners() {
       const s = state.sheet;
       const quantity = parseFloat(fd.get("quantity")) || 1;
       const updated = { ...s.entry, name: fd.get("name").trim(), meal: fd.get("meal"), quantity, unit: fd.get("unit").trim() };
-      if (s.entry.perUnit) {
-        const pu = s.entry.perUnit;
-        updated.calories = round1(pu.calories * quantity);
-        updated.protein = round1(pu.protein * quantity);
-        updated.carbs = round1(pu.carbs * quantity);
-        updated.fat = round1(pu.fat * quantity);
-        updated.fiber = round1((pu.fiber || 0) * quantity);
-        updated.sugar = round1((pu.sugar || 0) * quantity);
-        updated.satFat = round1((pu.satFat || 0) * quantity);
-        updated.sodium = round1((pu.sodium || 0) * quantity);
-      } else {
-        Object.assign(updated, readNutritionFields(fd));
-      }
+      // Always save whatever's currently in the nutrition fields, not a
+      // recompute from perUnit*quantity — the live quantity-change listener
+      // already keeps them in sync automatically, but typing a direct
+      // correction into a field (e.g. the scanned barcode's numbers were
+      // off) needs to actually stick.
+      Object.assign(updated, readNutritionFields(fd));
       await dbUpdateEntry(updated);
       await refreshEntries();
       await closeSheet();
