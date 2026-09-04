@@ -1313,7 +1313,10 @@ function renderFavoriteBuilderSheet(s) {
 
 function renderAddItemSection(s) {
   if (!s.addingItem) {
-    return `<button class="btn btn-secondary btn-block" data-action="show-add-item-form" style="margin-top:4px;">+ Add Item</button>`;
+    return `
+      <button class="btn btn-secondary btn-block" data-action="show-add-item-form" style="margin-top:4px;">+ Add Item</button>
+      ${state.clipboard ? `<button class="btn btn-secondary btn-block" data-action="paste-fav-item" style="margin-top:8px;">Paste "${escapeHtml(state.clipboard.name)}"</button>` : ""}
+    `;
   }
   const ai = s.addingItem;
   const tabs = `
@@ -1912,6 +1915,20 @@ async function handleAction(action, ds, el) {
       if (it) {
         state.clipboard = clipboardFromFoodItem(it);
         showToast(`Copied "${it.name}" — tap paste on any meal`, "success");
+      }
+      break;
+    }
+    case "paste-fav-item": {
+      const c = state.clipboard;
+      if (c) {
+        state.sheet.items.push({
+          name: c.name, quantity: c.quantity, unit: c.unit,
+          calories: c.calories, protein: c.protein, carbs: c.carbs, fat: c.fat,
+          fiber: c.fiber, sugar: c.sugar, satFat: c.satFat, sodium: c.sodium,
+          perUnit: c.perUnit || null,
+        });
+        renderSheetRoot();
+        showToast(`Pasted "${c.name}"`, "success");
       }
       break;
     }
