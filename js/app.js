@@ -1650,7 +1650,7 @@ async function handleAction(action, ds, el) {
 
     // ---- add sheet ----
     case "open-add-sheet":
-      state.sheet = { type: "add", meal: ds.meal, tab: "scan", product: null, lookupLoading: false, scanError: null, qty: 1, saveFav: false, manual: newManualDraft(), favSearch: "", manualSearch: newManualSearchState() };
+      state.sheet = { type: "add", meal: ds.meal, tab: "favorites", product: null, lookupLoading: false, scanError: null, qty: 1, saveFav: false, manual: newManualDraft(), favSearch: "", manualSearch: newManualSearchState() };
       renderSheetRoot();
       break;
     case "add-sheet-tab":
