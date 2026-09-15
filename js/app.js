@@ -972,39 +972,39 @@ function renderNutritionInputs(m, { readonly = false } = {}) {
     <div class="form-grid-3">
       <div class="field-wrap">
         <span class="field-label">Calories</span>
-        <input type="number" name="calories" step="1" min="0" value="${fmtNum(m.calories, 1)}" ${ro} required>
+        <input type="number" name="calories" step="any" min="0" value="${fmtNum(m.calories, 1)}" ${ro} required>
       </div>
       <div class="field-wrap">
         <span class="field-label">Protein (g)</span>
-        <input type="number" name="protein" step="0.1" min="0" value="${fmtNum(m.protein, 1)}" ${ro}>
+        <input type="number" name="protein" step="any" min="0" value="${fmtNum(m.protein, 1)}" ${ro}>
       </div>
       <div class="field-wrap">
         <span class="field-label">Carbs (g)</span>
-        <input type="number" name="carbs" step="0.1" min="0" value="${fmtNum(m.carbs, 1)}" ${ro}>
+        <input type="number" name="carbs" step="any" min="0" value="${fmtNum(m.carbs, 1)}" ${ro}>
       </div>
     </div>
     <div class="form-grid-3">
       <div class="field-wrap">
         <span class="field-label">Fat (g)</span>
-        <input type="number" name="fat" step="0.1" min="0" value="${fmtNum(m.fat, 1)}" ${ro}>
+        <input type="number" name="fat" step="any" min="0" value="${fmtNum(m.fat, 1)}" ${ro}>
       </div>
       <div class="field-wrap">
         <span class="field-label">Fiber (g)</span>
-        <input type="number" name="fiber" step="0.1" min="0" value="${fmtNum(m.fiber, 1)}" ${ro}>
+        <input type="number" name="fiber" step="any" min="0" value="${fmtNum(m.fiber, 1)}" ${ro}>
       </div>
       <div class="field-wrap">
         <span class="field-label">Sugar (g)</span>
-        <input type="number" name="sugar" step="0.1" min="0" value="${fmtNum(m.sugar, 1)}" ${ro}>
+        <input type="number" name="sugar" step="any" min="0" value="${fmtNum(m.sugar, 1)}" ${ro}>
       </div>
     </div>
     <div class="form-grid">
       <div class="field-wrap">
         <span class="field-label">Sat Fat (g)</span>
-        <input type="number" name="satFat" step="0.1" min="0" value="${fmtNum(m.satFat, 1)}" ${ro}>
+        <input type="number" name="satFat" step="any" min="0" value="${fmtNum(m.satFat, 1)}" ${ro}>
       </div>
       <div class="field-wrap">
         <span class="field-label">Sodium (mg)</span>
-        <input type="number" name="sodium" step="1" min="0" value="${fmtNum(m.sodium, 1)}" ${ro}>
+        <input type="number" name="sodium" step="any" min="0" value="${fmtNum(m.sodium, 1)}" ${ro}>
       </div>
     </div>
   `;
