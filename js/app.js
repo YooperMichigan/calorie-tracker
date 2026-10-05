@@ -13,13 +13,11 @@ const state = {
 
   mealsSearch: "",
 
-  summaryMode: "weekly",       // 'weekly' | 'monthly' | 'supplements'
+  summaryMode: "weekly",       // 'weekly' | 'monthly'
   weekAnchor: todayISO(),
   monthAnchor: todayISO(),
-  supplementsAnchor: todayISO(),
   weeklyData: null,
   monthlyData: null,
-  supplementsData: null,
 
   // Copied food item (from a logged entry or a saved-meal item), ready to
   // paste into any meal on any day — cleared only by copying something
@@ -146,7 +144,6 @@ async function refreshWater() {
 
 async function refreshSupplements() {
   state.supplements = await dbGetSupplementsForDate(state.logDate);
-  state.supplementsData = null;
 }
 
 async function refreshSavedSupplements() {
@@ -249,24 +246,6 @@ async function refreshMonthlyData() {
   };
 
   state.monthlyData = { range, dailyTotals, monthTotal, monthWater, daysWithData, mealTotals, avg, weeklyAvg };
-}
-
-async function refreshSupplementsData() {
-  const range = monthRangeFor(state.supplementsAnchor);
-  const startISO = range.days[0], endISO = range.days[range.days.length - 1];
-  const all = await dbGetSupplementsForDateRange(startISO, endISO);
-  // Newest day first, and within a day, most-recently-logged first.
-  const byDate = new Map();
-  all.forEach((s) => {
-    if (!byDate.has(s.date)) byDate.set(s.date, []);
-    byDate.get(s.date).push(s);
-  });
-  const days = Array.from(byDate.keys()).sort().reverse().map((date) => ({
-    date,
-    items: byDate.get(date).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
-  }));
-
-  state.supplementsData = { range, days, total: all.length, all };
 }
 
 // ============================================================================
@@ -632,14 +611,9 @@ function renderSummaryView() {
     <div class="section-tabs">
       <button class="section-tab ${state.summaryMode === "weekly" ? "active" : ""}" data-action="summary-mode" data-mode="weekly">Weekly</button>
       <button class="section-tab ${state.summaryMode === "monthly" ? "active" : ""}" data-action="summary-mode" data-mode="monthly">Monthly</button>
-      <button class="section-tab ${state.summaryMode === "supplements" ? "active" : ""}" data-action="summary-mode" data-mode="supplements">Supplements</button>
     </div>
   `;
-  let body;
-  if (state.summaryMode === "weekly") body = renderWeeklySummary();
-  else if (state.summaryMode === "monthly") body = renderMonthlySummary();
-  else body = renderSupplementsSummary();
-  return modeTabs + body;
+  return modeTabs + (state.summaryMode === "weekly" ? renderWeeklySummary() : renderMonthlySummary());
 }
 
 function renderWeeklySummary() {
@@ -799,54 +773,6 @@ function renderMonthlySummary() {
         </div>
       ` : ""}
     </div>
-  `;
-}
-
-function renderSupplementsSummary() {
-  if (!state.supplementsData) return `<div class="chart-empty">Loading…</div>`;
-  const d = state.supplementsData;
-  const thisMonth = monthRangeFor(todayISO());
-  const isCurrentMonth = thisMonth.year === d.range.year && thisMonth.month === d.range.month;
-
-  const dayGroups = d.days.length ? d.days.map((day) => `
-    <div class="chart-card" style="margin-bottom:10px;">
-      <div class="chart-title">${escapeHtml(formatDateLabel(day.date))}</div>
-      <div class="entry-list">
-        ${day.items.map((s) => `
-          <div class="entry-row">
-            <div class="entry-main">
-              <div class="entry-name">${escapeHtml(s.name)}</div>
-              ${supplementMetaLabel(s) ? `<div class="entry-meta"><span>${escapeHtml(supplementMetaLabel(s))}</span></div>` : ""}
-            </div>
-          </div>
-        `).join("")}
-      </div>
-    </div>
-  `).join("") : `<div class="chart-empty">No supplements logged this month</div>`;
-
-  return `
-    <div class="date-nav">
-      <button class="date-nav-btn" data-action="supp-month-prev" aria-label="Previous month">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
-      </button>
-      <div class="date-nav-label"><span class="date-nav-main">${formatMonthLabel(d.range)}</span></div>
-      ${!isCurrentMonth ? `<button class="today-btn" data-action="supp-month-today">This Month</button>` : `<span style="width:34px"></span>`}
-      <button class="date-nav-btn" data-action="supp-month-next" aria-label="Next month">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
-      </button>
-    </div>
-
-    <div class="summary-cards">
-      <div class="summary-card">
-        <div class="summary-card-label">Total Logged</div>
-        <div class="summary-card-value">${fmtNum(d.total)}</div>
-        <div class="summary-card-sub">${d.days.length} day${d.days.length === 1 ? "" : "s"} with entries</div>
-      </div>
-    </div>
-
-    ${renderSupplementNutrientsCard(d.all, "Nutrient Totals This Month")}
-
-    ${dayGroups}
   `;
 }
 
@@ -1980,9 +1906,6 @@ async function handleAction(action, ds, el) {
     case "month-prev": state.monthAnchor = addMonths(state.monthAnchor, -1); await refreshMonthlyData(); renderMain(); break;
     case "month-next": state.monthAnchor = addMonths(state.monthAnchor, 1); await refreshMonthlyData(); renderMain(); break;
     case "month-today": state.monthAnchor = todayISO(); await refreshMonthlyData(); renderMain(); break;
-    case "supp-month-prev": state.supplementsAnchor = addMonths(state.supplementsAnchor, -1); await refreshSupplementsData(); renderMain(); break;
-    case "supp-month-next": state.supplementsAnchor = addMonths(state.supplementsAnchor, 1); await refreshSupplementsData(); renderMain(); break;
-    case "supp-month-today": state.supplementsAnchor = todayISO(); await refreshSupplementsData(); renderMain(); break;
 
     // ---- menu / backup ----
     case "open-menu": state.sheet = { type: "menu" }; renderSheetRoot(); break;
@@ -2032,7 +1955,6 @@ async function logFavoriteToMeal(fav, meal, date) {
 async function ensureSummaryDataLoaded() {
   if (state.summaryMode === "weekly" && !state.weeklyData) await refreshWeeklyData();
   if (state.summaryMode === "monthly" && !state.monthlyData) await refreshMonthlyData();
-  if (state.summaryMode === "supplements" && !state.supplementsData) await refreshSupplementsData();
 }
 
 // ============================================================================
@@ -2248,7 +2170,7 @@ function attachGlobalListeners() {
       try {
         const { entryCount, favoriteCount } = await importBackupFile(file);
         await Promise.all([refreshEntries(), refreshFavorites(), refreshWater(), refreshSupplements(), refreshSavedSupplements()]);
-        state.weeklyData = null; state.monthlyData = null; state.supplementsData = null;
+        state.weeklyData = null; state.monthlyData = null;
         await closeSheet();
         renderAll();
         showToast(`Restored ${entryCount} entries, ${favoriteCount} saved meals`, "success");
